@@ -11,7 +11,9 @@
 
 #include <cassert>
 
-static constexpr auto MAX_DIGITS_BTC = 16;
+// Max width for privacy/justify formatting of the integer part (total display width
+// conceptually includes fractional digits). Large enough for very large LDOGE balances.
+static constexpr auto MAX_DIGITS_BTC = 24;
 
 BitcoinUnits::BitcoinUnits(QObject *parent):
         QAbstractListModel(parent),
@@ -35,7 +37,7 @@ QString BitcoinUnits::longName(Unit unit)
     case Unit::BTC: return QString("LDOGE");
     case Unit::mBTC: return QString("mLDOGE");
     case Unit::uBTC: return QString::fromUtf8("μLDOGE");
-    case Unit::SAT: return QString("Ltoshi)");
+    case Unit::SAT: return QString("Ltoshi");
     } // no default case, so the compiler can warn about missing cases
     assert(false);
 }
@@ -65,8 +67,9 @@ QString BitcoinUnits::description(Unit unit)
 qint64 BitcoinUnits::factor(Unit unit)
 {
     switch (unit) {
-    case Unit::BTC: return 1'000'000;
-    case Unit::mBTC: return 1'000;
+    // Base unit is 1e-8 LDOGE (same as COIN / satoshi-style atomics).
+    case Unit::BTC: return COIN;
+    case Unit::mBTC: return 100'000;
     case Unit::uBTC: return 100;
     case Unit::SAT: return 1;
     } // no default case, so the compiler can warn about missing cases
@@ -181,9 +184,9 @@ bool BitcoinUnits::parse(Unit unit, const QString& value, CAmount* val_out)
     bool ok = false;
     QString str = whole + decimals.leftJustified(num_decimals, '0');
 
-    if(str.size() > 18)
-    {
-        return false; // Longer numbers will exceed 63 bits
+    // str is the amount in smallest units (no sign); max positive int64 is 19 decimal digits.
+    if (str.size() > 19) {
+        return false;
     }
     CAmount retvalue(str.toLongLong(&ok));
     if(val_out)

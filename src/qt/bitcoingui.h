@@ -31,6 +31,7 @@
 #include <qt/macos_appnap.h>
 #endif
 
+#include <deque>
 #include <memory>
 
 class NetworkStyle;
@@ -57,6 +58,7 @@ struct BlockAndHeaderTipInfo;
 
 QT_BEGIN_NAMESPACE
 class QAction;
+class QTimer;
 class QComboBox;
 class QDateTime;
 class QProgressBar;
@@ -196,6 +198,20 @@ private:
     /** Keep track of previous number of blocks, to detect progress */
     int prevBlocks = 0;
     int spinnerFrame = 0;
+
+    /** LiteDoge: current block height, always shown in the status bar */
+    QLabel* labelBlockHeight = nullptr;
+    /** LiteDoge: sync speed and time left, as on the FlapX wallet. Sampled
+     *  every few seconds from the client model's cached heights (no locks). */
+    QTimer* syncEstimateTimer = nullptr;
+    std::deque<std::pair<qint64, int>> syncSamples; //!< (msecs, height)
+    int syncTargetHeight = -1;
+    double syncBlocksPerSec = 0;
+    qint64 syncSecsLeft = -1;
+    /** Recompute the speed and time left, refresh the block height */
+    void updateSyncEstimate();
+    /** Show the estimate on the progress bar; false when there is none yet */
+    bool applySyncEstimate(int count);
 
     const PlatformStyle *platformStyle;
     const NetworkStyle* const m_network_style;

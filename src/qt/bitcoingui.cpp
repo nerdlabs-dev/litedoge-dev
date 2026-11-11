@@ -51,6 +51,7 @@
 #include <QComboBox>
 #include <QCursor>
 #include <QDateTime>
+#include <QLocale>
 #include <QDragEnterEvent>
 #include <QInputDialog>
 #include <QKeySequence>
@@ -199,6 +200,10 @@ BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformSty
     frameBlocksLayout->addStretch();
     frameBlocksLayout->addWidget(labelBlocksIcon);
     frameBlocksLayout->addStretch();
+    // LiteDoge: the current block, always visible
+    labelBlockHeight = new QLabel();
+    labelBlockHeight->setToolTip(tr("Current block height"));
+    frameBlocksLayout->addWidget(labelBlockHeight);
 
     // Progress bar and label for blocks download
     progressBarLabel = new QLabel();
@@ -211,6 +216,13 @@ BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformSty
     statusBar()->addWidget(progressBarLabel);
     statusBar()->addWidget(progressBar);
     statusBar()->addPermanentWidget(frameBlocks);
+
+    // LiteDoge: blocks per second and time left while syncing, and the live
+    // block height. Each tick reads two cached numbers; it never waits on
+    // block processing.
+    syncEstimateTimer = new QTimer(this);
+    connect(syncEstimateTimer, &QTimer::timeout, this, [this] { updateSyncEstimate(); });
+    syncEstimateTimer->start(1000);
 
     // Install event filter to be able to catch status tip events (QEvent::StatusTip)
     this->installEventFilter(this);
@@ -1179,6 +1191,62 @@ void BitcoinGUI::openOptionsDialogWithTab(OptionsDialog::Tab tab)
     GUIUtil::ShowModalDialogAsynchronously(dlg);
 }
 
+// Text for a duration, rounded to what's useful for a rough estimate
+static QString FormatTimeLeft(qint64 secs)
+{
+    if (secs < 60)
+        return QObject::tr("under a minute");
+    if (secs < 60 * 60)
+        return QObject::tr("%n min", "", (int)((secs + 30) / 60));
+    if (secs < 48 * 60 * 60) {
+        const int mins = (int)((secs + 30) / 60);
+        return QObject::tr("%1 h %2 min").arg(mins / 60).arg(mins % 60);
+    }
+    const int hours = (int)((secs + 1800) / 3600);
+    return QObject::tr("%1 days %2 h").arg(hours / 24).arg(hours % 24);
+}
+
+void BitcoinGUI::updateSyncEstimate()
+{
+    if (!clientModel) return;
+    const int height = clientModel->getNumBlocks();
+    const int headers = clientModel->getHeaderTipHeight();
+    labelBlockHeight->setText(tr("Block %1").arg(QLocale().toString(height)));
+
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (syncSamples.empty() || syncSamples.back().second != height || now - syncSamples.back().first >= 5000)
+        syncSamples.emplace_back(now, height);
+    // Average over the last 3 minutes
+    while (syncSamples.size() > 2 && now - syncSamples.front().first > 180000)
+        syncSamples.pop_front();
+
+    syncTargetHeight = headers;
+    syncBlocksPerSec = 0;
+    syncSecsLeft = -1;
+    const qint64 span = syncSamples.back().first - syncSamples.front().first;
+    const int gained = syncSamples.back().second - syncSamples.front().second;
+    if (span >= 15000 && gained > 0) {
+        syncBlocksPerSec = gained * 1000.0 / span;
+        if (headers > height)
+            syncSecsLeft = (qint64)((headers - height) / syncBlocksPerSec);
+    }
+    if (progressBar->isVisible())
+        applySyncEstimate(height);
+}
+
+bool BitcoinGUI::applySyncEstimate(int count)
+{
+    if (syncTargetHeight <= count || syncBlocksPerSec <= 0 || syncSecsLeft < 0)
+        return false;
+    progressBarLabel->setText(tr("Block %1 of %2").arg(QLocale().toString(count)).arg(QLocale().toString(syncTargetHeight)));
+    progressBar->setMaximum(syncTargetHeight);
+    progressBar->setValue(count);
+    progressBar->setFormat(tr("%1 blocks/s - about %2 left")
+        .arg(QString::number(syncBlocksPerSec, 'f', syncBlocksPerSec < 10 ? 1 : 0))
+        .arg(FormatTimeLeft(syncSecsLeft)));
+    return true;
+}
+
 void BitcoinGUI::setNumBlocks(int count, const QDateTime& blockDate, double nVerificationProgress, SyncType synctype, SynchronizationState sync_state)
 {
 // Disabling macOS App Nap on initial sync, disk and reindex operations.
@@ -1260,9 +1328,12 @@ void BitcoinGUI::setNumBlocks(int count, const QDateTime& blockDate, double nVer
         QString timeBehindText = GUIUtil::formatNiceTimeOffset(secs);
 
         progressBarLabel->setVisible(true);
-        progressBar->setFormat(tr("%1 behind").arg(timeBehindText));
-        progressBar->setMaximum(1000000000);
-        progressBar->setValue(nVerificationProgress * 1000000000.0 + 0.5);
+        if (!applySyncEstimate(count)) {
+            // No estimate yet (just started, or no peer is ahead): how far behind
+            progressBar->setFormat(tr("%1 behind").arg(timeBehindText));
+            progressBar->setMaximum(1000000000);
+            progressBar->setValue(nVerificationProgress * 1000000000.0 + 0.5);
+        }
         progressBar->setVisible(true);
 
         tooltip = tr("Catching up…") + QString("<br>") + tooltip;
@@ -1287,6 +1358,10 @@ void BitcoinGUI::setNumBlocks(int count, const QDateTime& blockDate, double nVer
         tooltip += tr("Last received block was generated %1 ago.").arg(timeBehindText);
         tooltip += QString("<br>");
         tooltip += tr("Transactions after this will not yet be visible.");
+        if (syncBlocksPerSec > 0 && syncTargetHeight > count) {
+            tooltip += QString("<br>");
+            tooltip += tr("%1 blocks per second, %2 blocks to go.").arg(QString::number(syncBlocksPerSec, 'f', syncBlocksPerSec < 10 ? 1 : 0)).arg(syncTargetHeight - count);
+        }
     }
 
     // Don't word-wrap this (fixed-width) tooltip

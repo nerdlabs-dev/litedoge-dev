@@ -110,7 +110,7 @@ jobs:
             sleep 20
           done
           chmod +x bin/*
-          SYNC_MINUTES=55 contrib/ci/sync-test.sh bin
+          SYNC_MINUTES=55 SYNC_NODES="${{ vars.LDOGE_SYNC_NODES }}" contrib/ci/sync-test.sh bin
 
       - uses: actions/upload-artifact@v4
         if: always()

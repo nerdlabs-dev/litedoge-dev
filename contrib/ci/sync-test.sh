@@ -3,7 +3,8 @@
 # how far it got, which peers it used and whether any block was rejected.
 # Used by CI as a check that the wallet still follows the LDOGE chain.
 #
-# Usage: SYNC_MINUTES=30 contrib/ci/sync-test.sh <directory with litedoged and litedoge-cli>
+# Usage: SYNC_MINUTES=30 [SYNC_NODES="ip[:port] ..."] contrib/ci/sync-test.sh <directory with litedoged and litedoge-cli>
+# SYNC_NODES: extra nodes to connect to (addnode), e.g. your own LDOGE node.
 # Writes sync-test/debug.log. Fails if a block was rejected as invalid or if
 # no block past the genesis block was downloaded.
 set -u
@@ -25,6 +26,16 @@ logtimemicros=0
 rpcuser=ci
 rpcpassword=ci-$RANDOM-$RANDOM
 CONF
+# Nodes listed in the LDOGE wiki's full node guide, plus any given in SYNC_NODES
+for n in 108.95.86.140 122.173.31.90 154.246.247.104 154.57.7.131 174.84.66.125 185.236.200.18 195.46.187.110 24.18.45.238 46.223.163.38 67.173.133.238 68.134.231.97 ${SYNC_NODES:-}; do
+    echo "addnode=$n" >> "$DATA/litedoge.conf"
+done
+
+echo "::group::DNS seeds"
+for h in cloud.litedoge.info seed01.litedogeofficial.org seed02.litedogeofficial.org seed03.litedogeofficial.org seed04.litedogeofficial.org seed05.litedogeofficial.org seed06.litedogeofficial.org seed07.litedogeofficial.org seed08.litedogeofficial.org ldoge.nerdlabs001.com; do
+    echo "$h: $(getent ahostsv4 "$h" | awk '{print $1}' | sort -u | tr '\n' ' ')"
+done
+echo "::endgroup::"
 
 CLI() { "$BIN/litedoge-cli" -datadir="$DATA" "$@"; }
 
@@ -86,8 +97,13 @@ if grep -qE 'InvalidChainFound|ConnectBlock.*failed|ERROR: (Accept|Connect|Proce
 fi
 B=$(CLI getblockcount 2>/dev/null || echo 0)
 if [ "${B:-0}" = "0" ] || [ "$B" = "?" ]; then
-    summary "**No blocks were downloaded.**"
-    FAIL=1
+    if grep -q "peer=[0-9]* .*version\|receive version message" "$OUT/debug.log"; then
+        summary "**No blocks were downloaded.**"
+        FAIL=1
+    else
+        summary "**No LDOGE node could be reached** (DNS seeds and listed nodes didn't answer), so nothing was tested. Set the repository variable LDOGE_SYNC_NODES to one or more live node IPs."
+        FAIL=1
+    fi
 fi
 CLI stop >/dev/null 2>&1
 exit $FAIL

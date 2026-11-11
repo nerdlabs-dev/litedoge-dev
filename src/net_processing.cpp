@@ -110,7 +110,9 @@ static constexpr auto GETDATA_TX_INTERVAL{60s};
 /** Limit to avoid sending big packets. Not used in processing incoming GETDATA for compatibility */
 static const unsigned int MAX_GETDATA_SZ = 1000;
 /** Number of blocks that can be requested at any given time from a single peer. */
-static const int MAX_BLOCKS_IN_TRANSIT_PER_PEER = 16;
+/** LiteDoge: blocks are small (mostly a coinbase and a coinstake), so ask each
+ *  peer for up to 500 at a time, as the FlapX wallet does (Bitcoin Core: 16) */
+static const int MAX_BLOCKS_IN_TRANSIT_PER_PEER = 500;
 /** Default time during which a peer must stall block download progress before being disconnected.
  * the actual timeout is increased temporarily if peers are disconnected for hitting the timeout */
 static constexpr auto BLOCK_STALLING_TIMEOUT_DEFAULT{2s};
@@ -128,7 +130,8 @@ static const int MAX_BLOCKTXN_DEPTH = 10;
  *  Larger windows tolerate larger download speed differences between peer, but increase the potential
  *  degree of disordering of blocks on disk (which make reindexing and pruning harder). We'll probably
  *  want to make this a per-peer adaptive value at some point. */
-static const unsigned int BLOCK_DOWNLOAD_WINDOW = 1024;
+// LiteDoge: room for several peers' 500-block requests (Bitcoin Core: 1024)
+static const unsigned int BLOCK_DOWNLOAD_WINDOW = 8192;
 /** Block download timeout base, expressed in multiples of the block interval (i.e. 10 min) */
 static constexpr double BLOCK_DOWNLOAD_TIMEOUT_BASE = 1;
 /** Additional block download timeout per parallel downloading peer (i.e. 5 min) */
@@ -354,6 +357,8 @@ struct Peer {
     std::chrono::microseconds m_next_addr_send GUARDED_BY(m_addr_send_times_mutex){0};
     /** Time point to possibly re-announce our local address to this peer. */
     std::chrono::microseconds m_next_local_addr_send GUARDED_BY(m_addr_send_times_mutex){0};
+    /** LiteDoge: g_local_address_epoch when our address was last sent to this peer */
+    int m_local_addr_epoch GUARDED_BY(m_addr_send_times_mutex){0};
     /** Whether the peer has signaled support for receiving ADDRv2 (BIP155)
      *  messages, indicating a preference to receive ADDRv2 instead of ADDR ones. */
     std::atomic_bool m_wants_addrv2{false};
@@ -3307,6 +3312,8 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         pfrom.m_has_all_wanted_services = HasAllDesirableServiceFlags(nServices);
         peer->m_their_services = nServices;
         pfrom.SetAddrLocal(addrMe);
+        // LiteDoge: learn our public address from what outbound peers see
+        LearnLocalFromPeer(pfrom, addrMe);
         {
             LOCK(pfrom.m_subver_mutex);
             pfrom.cleanSubVer = cleanSubVer;
@@ -5329,7 +5336,8 @@ void PeerManagerImpl::MaybeSendAddr(CNode& node, Peer& peer, std::chrono::micros
     LOCK(peer.m_addr_send_times_mutex);
     // Periodically advertise our local address to the peer.
     if (fListen && !m_chainman.ActiveChainstate().IsInitialBlockDownload() &&
-        peer.m_next_local_addr_send < current_time) {
+        (peer.m_next_local_addr_send < current_time || peer.m_local_addr_epoch != g_local_address_epoch)) {
+        peer.m_local_addr_epoch = g_local_address_epoch;
         // If we've sent before, clear the bloom filter for the peer, so that our
         // self-announcement will actually go out.
         // This might be unnecessary if the bloom filter has already rolled

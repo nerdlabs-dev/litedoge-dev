@@ -27,7 +27,9 @@ struct Params;
 struct bilingual_str;
 
 //! -dbcache default (MiB)
-static const int64_t nDefaultDbCache = 450;
+// LiteDoge: 100 MB, the same as the FlapX wallet (Bitcoin Core: 450). Raise
+// it with -dbcache for a faster first sync on machines with memory to spare.
+static const int64_t nDefaultDbCache = 100;
 //! -dbbatchsize default (bytes)
 static const int64_t nDefaultDbBatchSize = 16 << 20;
 //! max. -dbcache (MiB)

@@ -143,6 +143,7 @@ enum
     LOCAL_IF,     // address a local interface listens on
     LOCAL_BIND,   // address explicit bound to
     LOCAL_MAPPED, // address reported by UPnP or NAT-PMP
+    LOCAL_PEER,   // LiteDoge: public address our outbound peers agree they see us at
     LOCAL_MANUAL, // address explicitly specified (-externalip=)
 
     LOCAL_MAX
@@ -166,6 +167,15 @@ bool AddLocal(const CService& addr, int nScore = LOCAL_NONE);
 bool AddLocal(const CNetAddr& addr, int nScore = LOCAL_NONE);
 void RemoveLocal(const CService& addr);
 bool SeenLocal(const CService& addr);
+/** LiteDoge: an outbound peer told us the address it sees us at (its version
+ *  message). Once peers in two different /16 networks agree on a public
+ *  address, it becomes a local address (LOCAL_PEER) with our listen port and
+ *  is advertised to every peer. Replaces the old checkip.dyndns.org lookup of
+ *  the 3.x wallets, without any website. Off with -discover=0 or -externalip. */
+void LearnLocalFromPeer(const CNode& node, const CService& addr_me);
+/** Bumped whenever LearnLocalFromPeer finds a new address, so it is
+ *  advertised right away instead of at the next daily rebroadcast */
+extern std::atomic<int> g_local_address_epoch;
 bool IsLocal(const CService& addr);
 bool GetLocal(CService &addr, const CNetAddr *paddrPeer = nullptr);
 CService GetLocalAddress(const CNetAddr& addrPeer);

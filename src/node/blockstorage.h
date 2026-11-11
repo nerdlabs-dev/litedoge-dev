@@ -38,11 +38,13 @@ namespace node {
 static constexpr bool DEFAULT_STOPAFTERBLOCKIMPORT{false};
 
 /** The pre-allocation chunk size for blk?????.dat files (since 0.8) */
-static const unsigned int BLOCKFILE_CHUNK_SIZE = 0x1000000; // 16 MiB
+static const unsigned int BLOCKFILE_CHUNK_SIZE = 0x400000; // 4 MiB
 /** The pre-allocation chunk size for rev?????.dat files (since 0.8) */
 static const unsigned int UNDOFILE_CHUNK_SIZE = 0x100000; // 1 MiB
 /** The maximum size of a blk?????.dat file (since 0.8) */
-static const unsigned int MAX_BLOCKFILE_SIZE = 0x8000000; // 128 MiB
+/** LiteDoge: start a new block file every 25 MiB (26,214,400 bytes), as the
+ *  FlapX wallet does, so a chain snapshot is many small files (Bitcoin Core: 128 MiB) */
+static const unsigned int MAX_BLOCKFILE_SIZE = 25 * 1024 * 1024;
 
 /** Size of header written by WriteBlockToDisk before a serialized CBlock */
 static constexpr size_t BLOCK_SERIALIZATION_HEADER_SIZE = CMessageHeader::MESSAGE_START_SIZE + sizeof(unsigned int);

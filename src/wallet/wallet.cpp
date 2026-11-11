@@ -3626,6 +3626,7 @@ bool CWallet::CreateCoinStake(ChainstateManager& chainman, const CWallet* pwalle
                     file >> header;
                     fseek(file.Get(), postx.nTxOffset, SEEK_CUR);
                     file >> tx;
+                    if (g_txindex->cachedTxs.size() >= TxIndex::MAX_CACHED_TXS) g_txindex->cachedTxs.clear();
                     g_txindex->cachedTxs[pcoin->outpoint.hash]=std::pair(header,tx);
                 } catch (std::exception &e) {
                     return error("%s() : deserialize or I/O error in CreateCoinStake()", __PRETTY_FUNCTION__);

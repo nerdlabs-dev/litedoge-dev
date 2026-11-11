@@ -324,7 +324,9 @@ const fs::path& ArgsManager::GetBlocksDirPath() const
     }
 
     path /= fs::PathFromString(BaseParams().DataDir());
-    path /= "blocks";
+    // LiteDoge: block files live in "chain" (as in the FlapX wallet), next to
+    // the 3.x wallets' files if this is an old data directory
+    path /= "chain";
     fs::create_directories(path);
     return path;
 }

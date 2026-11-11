@@ -55,6 +55,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <set>
 #include <unordered_map>
 
 #include <math.h>
@@ -313,6 +314,37 @@ bool AddLocal(const CService& addr_, int nScore)
     }
 
     return true;
+}
+
+std::atomic<int> g_local_address_epoch{0};
+
+void LearnLocalFromPeer(const CNode& node, const CService& addr_me)
+{
+    static Mutex learn_mutex;
+    // reported address -> the /16 (IPv4) or /32 (IPv6) networks of the peers that reported it
+    static std::map<CNetAddr, std::set<std::vector<unsigned char>>> reports GUARDED_BY(learn_mutex);
+    static std::optional<CNetAddr> learned GUARDED_BY(learn_mutex);
+
+    if (!fDiscover || node.IsInboundConn() || node.IsFeelerConn() || node.IsAddrFetchConn()) return;
+    if (!addr_me.IsRoutable() || !node.addr.IsRoutable()) return;
+    if (!addr_me.IsIPv4() && !addr_me.IsIPv6()) return;
+
+    const std::vector<unsigned char> peer_bytes{node.addr.GetAddrBytes()};
+    const std::vector<unsigned char> group(peer_bytes.begin(), peer_bytes.begin() + std::min<size_t>(peer_bytes.size(), node.addr.IsIPv4() ? 2 : 4));
+    const CNetAddr ip{addr_me};
+
+    LOCK(learn_mutex);
+    if (reports.size() > 64) reports.clear();
+    auto& groups = reports[ip];
+    groups.insert(group);
+    if (groups.size() < 2 || (learned && *learned == ip)) return;
+
+    if (learned) RemoveLocal(CService(*learned, GetListenPort()));
+    if (AddLocal(CService(ip, GetListenPort()), LOCAL_PEER)) {
+        learned = ip;
+        ++g_local_address_epoch;
+        LogPrintf("Learned our public address from peers: %s\n", CService(ip, GetListenPort()).ToStringAddrPort());
+    }
 }
 
 bool AddLocal(const CNetAddr &addr, int nScore)

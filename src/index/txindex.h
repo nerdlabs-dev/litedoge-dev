@@ -47,7 +47,10 @@ public:
     bool FindTx(const uint256& tx_hash, uint256& block_hash, CTransactionRef& tx) const;
 
     bool FindTxPosition(const uint256& txid, CDiskTxPos& pos) const;
+    //! peercoin: transactions (and their block headers) recently read for
+    //! staking; cleared once it holds MAX_CACHED_TXS of them
     std::map<uint256,std::pair<CBlockHeader,CTransactionRef>> cachedTxs;
+    static constexpr size_t MAX_CACHED_TXS{20000};
 };
 
 /// The global transaction index, used in GetTransaction. May be null.

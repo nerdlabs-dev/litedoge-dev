@@ -2316,11 +2316,10 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // Check reward earnt on coinstake
     if (block.IsProofOfStake())
     {
-        // peercoin: coin stake tx earns reward instead of paying fee
-        uint64_t nCoinAge;
-        if (!GetCoinAge(*block.vtx[1], view, nCoinAge))
-            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "unable to get coin age for coinstake");
-
+        // LiteDoge: the stake reward depends on the height only, not on coin
+        // age, so coin age isn't computed here (the port read every staked
+        // coin's transaction from disk for it, on every block). Its one check,
+        // inputs older than the coinstake, is done in CheckTxInputs.
         CAmount nCalculatedStakeReward = GetProofOfStakeReward(pindex->pprev->nHeight, nFees);
 
         // LogPrintf("stakeRewardFound %llu stakeRewardCalculated %llu\n", nStakeReward / COIN, nCalculatedStakeReward / COIN);
@@ -4988,6 +4987,9 @@ bool GetCoinAge(const CTransaction& tx, const CCoinsViewCache &view, uint64_t& n
                 }
             } else
                 return error("%s() : tx missing in tx index in GetCoinAge()", __PRETTY_FUNCTION__);
+            // (bounded: the port let this cache grow by one transaction for
+            // every coin it was asked about, forever)
+            if (g_txindex->cachedTxs.size() >= TxIndex::MAX_CACHED_TXS) g_txindex->cachedTxs.clear();
             g_txindex->cachedTxs[prevout.hash] = std::pair(header,txPrev);
         }
 

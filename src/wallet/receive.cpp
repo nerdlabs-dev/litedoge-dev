@@ -210,7 +210,7 @@ void CachedTxGetAmounts(const CWallet& wallet, const CWalletTx& wtx,
 
     LOCK(wallet.cs_wallet);
 
-    // treat coinstake as a single "recieve" entry
+    // treat coinstake as a single "receive" entry
     if (wtx.IsCoinStake())
     {
         for (unsigned int i = 0; i < wtx.tx->vout.size(); ++i)

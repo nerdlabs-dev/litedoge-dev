@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Open litedoge URI</string>
+   <string>Open a LiteDoge URI</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>

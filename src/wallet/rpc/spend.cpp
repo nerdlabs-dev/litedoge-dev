@@ -264,7 +264,7 @@ RPCHelpMan optimizeutxoset()
                 "\nOptimize the UTXO set in order to maximize the PoS yield. This is only valid for continuous minting. The accumulated coinage will be reset!" +
         HELP_REQUIRING_PASSPHRASE,
                 {
-                    {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "The litedoge address to recieve all the new UTXOs. If not provided, new UTOXs will be assigned to the address of the input UTXOs."},
+                    {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "The LiteDoge address to receive all the new UTXOs. If not provided, new UTXOs will be assigned to the address of the input UTXOs."},
                     {"amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "The " + CURRENCY_UNIT + " amount to set the value of new UTXOs, i.e. make new UTXOs with value of 110. If amount is not provided, hardcoded value will be used."},
                     {"transmit", RPCArg::Type::BOOL, RPCArg::Default{false}, "If true, transmit transaction after generating it."},
                     {"fromAddress", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "The litedoge address to split coins from. If not provided, all available coins will be used."},

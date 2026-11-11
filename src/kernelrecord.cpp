@@ -1,4 +1,6 @@
 #include <kernelrecord.h>
+
+#include <consensus/consensus.h>
 #include <key_io.h>
 #include <wallet/wallet.h>
 #include <base58.h>
@@ -78,14 +80,17 @@ int64_t KernelRecord::getCoinAge() const
     return max(nValue * nDayWeight / COIN, (int64_t) 0);
 }
 
+// LiteDoge PoS v2: once a coin is nStakeMinAge (8 hours) old, each try has a
+// chance of target * value (in satoshis) / 2^256; the weight doesn't grow
+// with age (the port used Peercoin's coin-day weight). One try per 16 seconds.
 double KernelRecord::getProbToMintStake(double difficulty, int timeOffset) const
 {
     const Consensus::Params& params = Params().GetConsensus();
+    const int64_t age = (TicksSinceEpoch<std::chrono::seconds>(GetAdjustedTime()) - nTime) + timeOffset;
+    if (age < params.nStakeMinAge) return 0;
     double maxTarget = pow(static_cast<double>(2), 224);
     double target = maxTarget / difficulty;
-    int dayWeight = (min((TicksSinceEpoch<std::chrono::seconds>(GetAdjustedTime()) - nTime) + timeOffset, params.nStakeMaxAge) - params.nStakeMinAge) / 86400;
-    uint64_t coinAge = max(nValue * dayWeight / COIN, (int64_t)0);
-    return target * coinAge / pow(static_cast<double>(2), 256);
+    return std::min(1.0, target * static_cast<double>(nValue) / pow(static_cast<double>(2), 256));
 }
 
 double KernelRecord::getProbToMintWithinNMinutes(double difficulty, int minutes)
@@ -102,13 +107,13 @@ double KernelRecord::getProbToMintWithinNMinutes(double difficulty, int minutes)
         for(i = 0; i < d; i++)
         {
             timeOffset = i * 86400;
-            p = pow(1 - getProbToMintStake(difficulty, timeOffset), 86400);
+            p = pow(1 - getProbToMintStake(difficulty, timeOffset), 86400 / (STAKE_TIMESTAMP_MASK + 1));
             prob *= p;
         }
 
         // Probability for the m minutes of the last day
         timeOffset = d * 86400;
-        p = pow(1 - getProbToMintStake(difficulty, timeOffset), 60 * m);
+        p = pow(1 - getProbToMintStake(difficulty, timeOffset), 60 * m / (STAKE_TIMESTAMP_MASK + 1));
         prob *= p;
 
         prob = 1 - prob;

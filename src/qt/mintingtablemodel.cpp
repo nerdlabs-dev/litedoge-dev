@@ -14,6 +14,7 @@
 #include <wallet/wallet.h>
 #include <validation.h>
 #include <chainparams.h>
+#include <timedata.h>
 
 #include <QColor>
 #include <QTimer>
@@ -411,15 +412,13 @@ QVariant MintingTableModel::data(const QModelIndex &index, int role) const
         }
         break;
       case Qt::BackgroundColorRole:
-        int minAge = params.nStakeMinAge / 60 / 60 / 24;
-        int maxAge = params.nStakeMaxAge / 60 / 60 / 24;
-        if(rec->getAge() < minAge)
+        // LiteDoge PoS v2: a coin can stake once it is nStakeMinAge (8 hours)
+        // old, and its chance doesn't grow after that (the port compared
+        // whole days, so 8 hours rounded to 0 and every coin looked mature)
+        const int64_t ageSecs = TicksSinceEpoch<std::chrono::seconds>(GetAdjustedTime()) - rec->nTime;
+        if (ageSecs < params.nStakeMinAge)
         {
             return COLOR_MINT_YOUNG;
-        }
-        else if (rec->getAge() >= minAge && rec->getAge() < maxAge)
-        {
-            return COLOR_MINT_MATURE;
         }
         else
         {

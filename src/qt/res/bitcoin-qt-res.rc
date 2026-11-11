@@ -20,7 +20,7 @@ BEGIN
         BLOCK "040904E4" // U.S. English - multilingual (hex)
         BEGIN
             VALUE "CompanyName",        "Litedoge"
-            VALUE "FileDescription",    PACKAGE_NAME " (GUI node for Litedoge)"
+            VALUE "FileDescription",    PACKAGE_NAME " (GUI node for LiteDoge)"
             VALUE "FileVersion",        VER_FILEVERSION_STR
             VALUE "InternalName",       "litedoge-qt"
             VALUE "LegalCopyright",     COPYRIGHT_STR

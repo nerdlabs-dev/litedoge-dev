@@ -34,7 +34,7 @@ MintingView::MintingView(QWidget *parent) :
     youngColor->setMaximumHeight(15);
     youngColor->setMaximumWidth(10);
     youngColor->setStyleSheet(legendBoxStyle.arg(COLOR_MINT_YOUNG.red()).arg(COLOR_MINT_YOUNG.green()).arg(COLOR_MINT_YOUNG.blue()));
-    QLabel *youngLegend = new QLabel(tr("transaction is too young"));
+    QLabel *youngLegend = new QLabel(tr("too young to stake (under 8 hours)"));
     youngLegend->setContentsMargins(5,0,15,0);
 
     QLabel *matureColor = new QLabel(" ");
@@ -43,12 +43,16 @@ MintingView::MintingView(QWidget *parent) :
     matureColor->setStyleSheet(legendBoxStyle.arg(COLOR_MINT_MATURE.red()).arg(COLOR_MINT_MATURE.green()).arg(COLOR_MINT_MATURE.blue()));
     QLabel *matureLegend = new QLabel(tr("transaction is mature"));
     matureLegend->setContentsMargins(5,0,15,0);
+    // LiteDoge PoS v2: a coin's chance doesn't grow after 8 hours, so there
+    // is no in-between "mature" state
+    matureColor->hide();
+    matureLegend->hide();
 
     QLabel *oldColor = new QLabel(" ");
     oldColor->setMaximumHeight(15);
     oldColor->setMaximumWidth(10);
     oldColor->setStyleSheet(legendBoxStyle.arg(COLOR_MINT_OLD.red()).arg(COLOR_MINT_OLD.green()).arg(COLOR_MINT_OLD.blue()));
-    QLabel *oldLegend = new QLabel(tr("transaction has reached maximum probability"));
+    QLabel *oldLegend = new QLabel(tr("can stake (8 hours or older)"));
     oldLegend->setContentsMargins(5,0,15,0);
 
     QHBoxLayout *legendLayout = new QHBoxLayout();

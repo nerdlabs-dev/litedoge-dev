@@ -33,7 +33,10 @@ done
 
 echo "::group::DNS seeds"
 for h in cloud.litedoge.info seed01.litedogeofficial.org seed02.litedogeofficial.org seed03.litedogeofficial.org seed04.litedogeofficial.org seed05.litedogeofficial.org seed06.litedogeofficial.org seed07.litedogeofficial.org seed08.litedogeofficial.org ldoge.nerdlabs001.com; do
-    echo "$h: $(getent ahostsv4 "$h" | awk '{print $1}' | sort -u | tr '\n' ' ')"
+    ips="$(getent ahostsv4 "$h" | awk '{print $1}' | sort -u)"
+    echo "$h: $(echo $ips)"
+    # also try every address the seeds give directly
+    for ip in $ips; do echo "addnode=$ip" >> "$DATA/litedoge.conf"; done
 done
 echo "::endgroup::"
 
@@ -82,6 +85,9 @@ CLI getblockchaininfo 2>&1 | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"
 summary '```'
 
 cp "$DATA/debug.log" "$OUT/debug.log"
+echo "::group::Every node tried and what happened"
+grep -oE "(connection attempt to|connect\(\) to) [0-9.]+:[0-9]+[^(]*|receive version message: [^,]*, [^,]*, [^,]*, peer=[0-9]+" "$OUT/debug.log" | sort | uniq -c | sort -rn | head -n 80
+echo "::endgroup::"
 echo "::group::Problems in debug.log"
 grep -nE 'ERROR|error:|invalid|InvalidChainFound|bad-|failed|Misbehaving|disconnecting' "$OUT/debug.log" | head -n 300
 echo "::endgroup::"

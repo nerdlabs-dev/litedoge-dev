@@ -48,7 +48,7 @@ jobs:
       - name: Install dependencies
         run: |
           for i in 1 2 3 4; do
-            sudo apt-get update && sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config \
+            sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; sudo apt-get update && sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config \
             bsdmainutils python3 ccache libevent-dev libboost-dev libsqlite3-dev libdb5.3++-dev \
             libminiupnpc-dev libnatpmp-dev libssl-dev qtbase5-dev qttools5-dev qttools5-dev-tools \
             libqrencode-dev && break
@@ -129,7 +129,7 @@ jobs:
       - name: Install build tools
         run: |
           for i in 1 2 3 4; do
-            sudo apt-get update && sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config \
+            sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; sudo apt-get update && sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config \
             bsdmainutils python3 curl cmake ccache bison && break
             echo 'apt failed, retrying'; sleep 30
           done
@@ -190,7 +190,7 @@ jobs:
         continue-on-error: true
         run: |
           for i in 1 2 3 4; do
-            sudo apt-get update && sudo apt-get install -y gdb xvfb xdotool imagemagick libxkbcommon-x11-0 libxcb-icccm4 \
+            sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; sudo apt-get update && sudo apt-get install -y gdb xvfb xdotool imagemagick libxkbcommon-x11-0 libxcb-icccm4 \
             libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 libxcb-xkb1 libxcb-shape0 libfontconfig1 && break
             echo 'apt failed, retrying'; sleep 30
           done
@@ -214,7 +214,7 @@ jobs:
       - name: Install build tools
         run: |
           for i in 1 2 3 4; do
-            sudo apt-get update && sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config \
+            sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; sudo apt-get update && sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config \
             bsdmainutils python3 curl cmake ccache bison g++-mingw-w64-x86-64-posix nsis zip && break
             echo 'apt failed, retrying'; sleep 30
           done

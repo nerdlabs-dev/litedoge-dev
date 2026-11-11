@@ -1,0 +1,11 @@
+usr/local/bin/litedoge-qt usr/bin
+share/pixmaps/litedoge16.png usr/share/pixmaps
+share/pixmaps/litedoge32.png usr/share/pixmaps
+share/pixmaps/litedoge128.png usr/share/pixmaps
+share/pixmaps/litedoge256.png usr/share/pixmaps
+share/pixmaps/litedoge-testnet32.png usr/share/pixmaps
+share/pixmaps/litedoge-testnet128.png usr/share/pixmaps
+share/pixmaps/litedoge-testnet256.png usr/share/pixmaps
+debian/litedoge-qt.desktop usr/share/applications
+debian/litedoge-testnet-qt.desktop usr/share/applications
+debian/litedoge-qt.protocol usr/share/kde4/services/

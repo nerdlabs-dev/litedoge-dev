@@ -1,0 +1,3 @@
+contrib/litedoged.bash-completion	litedoged
+contrib/litedoge-cli.bash-completion	litedoge-cli
+contrib/litedoge-tx.bash-completion	litedoge-tx

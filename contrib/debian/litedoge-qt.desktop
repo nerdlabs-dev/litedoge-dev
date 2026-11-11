@@ -1,0 +1,11 @@
+[Desktop Entry]
+Encoding=UTF-8
+Name=LiteDoge
+Comment=Desktop allet for LiteDoge Cryptocurrency
+Comment[de]=Offizieller Client für die Kryptowährung LiteDoge
+Exec=litedoge-qt %u
+Terminal=false
+Type=Application
+Icon=/usr/share/pixmaps/litedoge128.png
+MimeType=x-scheme-handler/litedoge;
+Categories=Office;Finance;P2P;Network;Qt;

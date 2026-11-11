@@ -1,7 +1,6 @@
 <!DOCTYPE RCC><RCC version="1.0">
     <qresource prefix="/icons">
         <file alias="bitcoin">res/icons/bitcoin.png</file>
-        <file alias="peercoin">res/icons/litedoge.png</file>
         <file alias="address-book">res/icons/address-book.png</file>
         <file alias="send">res/icons/send.png</file>
         <file alias="connect_0">res/icons/connect0.png</file>
@@ -24,9 +23,7 @@
         <file alias="editpaste">res/icons/editpaste.png</file>
         <file alias="editcopy">res/icons/editcopy.png</file>
         <file alias="add">res/icons/add.png</file>
-        <file alias="peercoin_testnet">res/icons/litedoge_testnet.png</file>
         <file alias="edit">res/icons/edit.png</file>
-        <file alias="history">res/icons/history.png</file>
         <file alias="minting">res/icons/minting.png</file>
         <file alias="minted">res/icons/minted.png</file>
         <file alias="transactions">res/icons/transactions.png</file>
@@ -40,7 +37,6 @@
         <file alias="tx_inout">res/icons/tx_inout.png</file>
         <file alias="lock_closed">res/icons/lock_closed.png</file>
         <file alias="lock_open">res/icons/lock_open.png</file>
-        <file alias="sign">res/icons/sign.png</file>
         <file alias="multisig">res/icons/multisig.png</file>
         <file alias="warning">res/icons/warning.png</file>
         <file alias="fontbigger">res/icons/fontbigger.png</file>
@@ -51,22 +47,6 @@
         <file alias="hd_disabled">res/icons/hd_disabled.png</file>
         <file alias="network_disabled">res/icons/network_disabled.png</file>
         <file alias="proxy">res/icons/proxy.png</file>
-    </qresource>
-    <qresource prefix="/icons/black">
-        <file alias="connect_0">res/icons/black/connect0_16.png</file>
-        <file alias="connect_1">res/icons/black/connect1_16.png</file>
-        <file alias="connect_2">res/icons/black/connect2_16.png</file>
-        <file alias="connect_3">res/icons/black/connect3_16.png</file>
-        <file alias="connect_4">res/icons/black/connect4_16.png</file>
-        <file alias="synced">res/icons/black/synced.png</file>
-        <file alias="tx_mined">res/icons/black/tx_mined.png</file>
-        <file alias="tx_input">res/icons/black/tx_input.png</file>
-        <file alias="tx_output">res/icons/black/tx_output.png</file>
-        <file alias="tx_inout">res/icons/black/tx_inout.png</file>
-        <file alias="lock_closed">res/icons/black/lock_closed.png</file>
-        <file alias="lock_open">res/icons/black/lock_open.png</file>
-        <file alias="staking_off">res/icons/black/staking_off.png</file>
-        <file alias="staking_on">res/icons/black/staking_on.png</file>
     </qresource>
     <qresource prefix="/images">
         <file alias="logo">res/images/logo.png</file>

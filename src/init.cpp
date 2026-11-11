@@ -141,7 +141,7 @@ static const char* DEFAULT_ASMAP_FILENAME="ip_asn.map";
 /**
  * The PID file facilities.
  */
-static const char* BITCOIN_PID_FILENAME = "peercoind.pid";
+static const char* BITCOIN_PID_FILENAME = "litedoged.pid";
 
 static std::shared_ptr<CWallet> walletTmp;
 
@@ -1114,9 +1114,9 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     // Warn about relative -datadir path.
     if (args.IsArgSet("-datadir") && !args.GetPathArg("-datadir").is_absolute()) {
         LogPrintf("Warning: relative datadir option '%s' specified, which will be interpreted relative to the " /* Continued */
-                  "current working directory '%s'. This is fragile, because if peercoin is started in the future "
+                  "current working directory '%s'. This is fragile, because if litedoge is started in the future "
                   "from a different location, it will be unable to locate the current data files. There could "
-                  "also be data loss if peercoin is started while in a temporary directory.\n",
+                  "also be data loss if litedoge is started while in a temporary directory.\n",
                   args.GetArg("-datadir", ""), fs::PathToString(fs::current_path()));
     }
 

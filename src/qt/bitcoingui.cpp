@@ -231,7 +231,9 @@ BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformSty
     if(settings.value("bCheckGithub").toBool()) {
         QNetworkAccessManager* nam = new QNetworkAccessManager(this);
         connect(nam, &QNetworkAccessManager::finished, this, &BitcoinGUI::onResult);
-        QUrl url("http://mirror.peercoin.net/latest_release.json");
+        // LiteDoge: latest release on GitHub (was Peercoin's release feed,
+        // which would have told LiteDoge users to install Peercoin)
+        QUrl url("https://api.github.com/repos/ldoge/LDOGE/releases/latest");
         nam->get(QNetworkRequest(url));
     }
 
@@ -244,15 +246,15 @@ BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformSty
 
 void BitcoinGUI::onResult(QNetworkReply *reply) {
     if(reply->error() == QNetworkReply::NoError) {
-        std::regex versionRgx("v([0-9]+).([0-9]+).([0-9]+)ppc");
+        std::regex versionRgx("v([0-9]+)\\.([0-9]+)\\.([0-9]+)\\.([0-9]+)");
         std::smatch matches;
         int newVersion=0;
         QByteArray result = reply->readAll();
         QJsonDocument jsonResponse = QJsonDocument::fromJson(result);
         QJsonObject obj = jsonResponse.object();
         std::string tag_name = obj["tag_name"].toString().toStdString();
-        if(std::regex_search(tag_name, matches, versionRgx) && matches.size()==4) {
-            newVersion = std::stoi(matches[1].str()) * 1000000 + std::stoi(matches[2]) * 10000 + std::stoi(matches[3]) * 100;
+        if(std::regex_search(tag_name, matches, versionRgx) && matches.size()==5) {
+            newVersion = std::stoi(matches[1].str()) * 1000000 + std::stoi(matches[2]) * 10000 + std::stoi(matches[3]) * 100 + std::stoi(matches[4]);
             if (newVersion > LITEDOGE_VERSION) {
                 char versionInfo[200];
                 snprintf(versionInfo, 200, "This client is not the most recent version available, please update to release %s from github or disable this check in settings.", obj["tag_name"].toString().toUtf8().constData());
@@ -298,14 +300,14 @@ void BitcoinGUI::createActions()
     tabGroup->addAction(overviewAction);
 
     sendCoinsAction = new QAction(QIcon(":/icons/send"), tr("&Send"), this);
-    sendCoinsAction->setStatusTip(tr("Send coins to a Litedoge address"));
+    sendCoinsAction->setStatusTip(tr("Send coins to a LiteDoge address"));
     sendCoinsAction->setToolTip(sendCoinsAction->statusTip());
     sendCoinsAction->setCheckable(true);
     sendCoinsAction->setShortcut(QKeySequence(QStringLiteral("Alt+2")));
     tabGroup->addAction(sendCoinsAction);
 
     receiveCoinsAction = new QAction(QIcon(":/icons/receiving_addresses"), tr("&Receive"), this);
-    receiveCoinsAction->setStatusTip(tr("Request payments (generates QR codes and peercoin: URIs)"));
+    receiveCoinsAction->setStatusTip(tr("Request payments (generates QR codes and litedoge: URIs)"));
     receiveCoinsAction->setToolTip(receiveCoinsAction->statusTip());
     receiveCoinsAction->setCheckable(true);
     receiveCoinsAction->setShortcut(QKeySequence(QStringLiteral("Alt+3")));
@@ -378,9 +380,9 @@ void BitcoinGUI::createActions()
     changePassphraseAction = new QAction(tr("&Change Passphrase…"), this);
     changePassphraseAction->setStatusTip(tr("Change the passphrase used for wallet encryption"));
     signMessageAction = new QAction(tr("Sign &Message..."), this);
-    signMessageAction->setStatusTip(tr("Sign messages with your Litedoge addresses to prove you own them"));
+    signMessageAction->setStatusTip(tr("Sign messages with your LiteDoge addresses to prove you own them"));
     verifyMessageAction = new QAction(tr("&Verify Message..."), this);
-    verifyMessageAction->setStatusTip(tr("Verify messages to ensure they were signed with specified Litedoge addresses"));
+    verifyMessageAction->setStatusTip(tr("Verify messages to ensure they were signed with specified LiteDoge addresses"));
     m_load_psbt_action = new QAction(tr("&Load PSBT from file…"), this);
     m_load_psbt_action->setStatusTip(tr("Load Partially Signed Bitcoin Transaction"));
     m_load_psbt_clipboard_action = new QAction(tr("Load PSBT from &clipboard…"), this);
@@ -398,7 +400,7 @@ void BitcoinGUI::createActions()
     usedReceivingAddressesAction->setStatusTip(tr("Show the list of used receiving addresses and labels"));
 
     openAction = new QAction(tr("Open &URI…"), this);
-    openAction->setStatusTip(tr("Open a peercoin: URI"));
+    openAction->setStatusTip(tr("Open a litedoge: URI"));
 
     showHelpMessageAction = new QAction(tr("&Command-line Options"), this);
 
@@ -422,19 +424,19 @@ void BitcoinGUI::createActions()
 
     m_close_all_wallets_action = new QAction(tr("Close All Wallets…"), this);
     showHelpMessageAction->setMenuRole(QAction::NoRole);
-    showHelpMessageAction->setStatusTip(tr("Show the %1 help message to get a list with possible Litedoge command-line options").arg(PACKAGE_NAME));
+    showHelpMessageAction->setStatusTip(tr("Show the %1 help message to get a list with possible LiteDoge command-line options").arg(PACKAGE_NAME));
 
     openWebAction = new QAction(tr("&Website"), this);
-    openWebAction->setStatusTip(tr("Open the Litedoge website in a web browser."));
+    openWebAction->setStatusTip(tr("Open the LiteDoge website in a web browser."));
 
-    openDonateAction = new QAction(tr("&Donate"), this);
-    openDonateAction->setStatusTip(tr("Finacially support development of the Litedoge project."));
+    openDonateAction = new QAction(tr("Block &Explorer"), this);
+    openDonateAction->setStatusTip(tr("Open the LiteDoge block explorer in a web browser."));
 
     openChatroomAction = new QAction(tr("&Chatroom"), this);
-    openChatroomAction->setStatusTip(tr("Open the Litedoge Discord chat in a web browser."));
+    openChatroomAction->setStatusTip(tr("Open the LiteDoge Discord chat in a web browser."));
 
-    openForumAction = new QAction(tr("&Forum"), this);
-    openForumAction->setStatusTip(tr("Open talk.peercoin.net in a web browser."));
+    openForumAction = new QAction(tr("&Reddit"), this);
+    openForumAction->setStatusTip(tr("Open the LiteDoge Reddit in a web browser."));
 
     m_mask_values_action = new QAction(tr("&Mask values"), this);
     m_mask_values_action->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_M));
@@ -1073,19 +1075,19 @@ void BitcoinGUI::gotoLoadPSBT(bool from_clipboard)
 }
 
 void BitcoinGUI::openWeb() {
-    QDesktopServices::openUrl(QUrl("https://peercoin.net"));
+    QDesktopServices::openUrl(QUrl("https://litedogeofficial.org/"));
 }
 
 void BitcoinGUI::openDonate() {
-    QDesktopServices::openUrl(QUrl("https://www.peercoin.net/foundation"));
+    QDesktopServices::openUrl(QUrl("http://blocks.litedogeofficial.org/"));
 }
 
 void BitcoinGUI::openChatroom() {
-    QDesktopServices::openUrl(QUrl("https://discord.gg/XPxfwtG"));
+    QDesktopServices::openUrl(QUrl("http://discord.litedogeofficial.org/"));
 }
 
 void BitcoinGUI::openForum() {
-    QDesktopServices::openUrl(QUrl("https://talk.peercoin.net"));
+    QDesktopServices::openUrl(QUrl("http://reddit.litedogeofficial.org/"));
 }
 
 #endif // ENABLE_WALLET
@@ -1107,7 +1109,7 @@ void BitcoinGUI::updateNetworkState()
 
     if (m_node.getNetworkActive()) {
         //: A substring of the tooltip.
-        tooltip = tr("%n active connection(s) to Litedoge network.", "", count);
+        tooltip = tr("%n active connection(s) to LiteDoge network.", "", count);
     } else {
         //: A substring of the tooltip.
         tooltip = tr("Network activity disabled.");

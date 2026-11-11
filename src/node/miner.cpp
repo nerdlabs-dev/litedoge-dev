@@ -526,7 +526,7 @@ static bool ProcessBlockFound(const CBlock* pblock, const CChainParams& chainpar
     {
         LOCK(cs_main);
         if (pblock->hashPrevBlock != m_node.chainman->ActiveChain().Tip()->GetBlockHash())
-            return error("PeercoinMiner: generated block is stale");
+            return error("LiteDogeMiner: generated block is stale");
     }
 
     // Process this block the same as if we had received it from another node
@@ -541,7 +541,7 @@ void PoSMiner(std::shared_ptr<CWallet> pwallet, NodeContext& m_node)
 {
     CConnman* connman = m_node.connman.get();
     LogPrintf("CPUMiner started for proof-of-stake\n");
-    util::ThreadRename("peercoin-stake-minter");
+    util::ThreadRename("litedoge-stake-minter");
 
     unsigned int nExtraNonce = 0;
 
@@ -634,7 +634,7 @@ void PoSMiner(std::shared_ptr<CWallet> pwallet, NodeContext& m_node)
                 }
                 catch (const std::runtime_error &e)
                 {
-                    LogPrintf("PeercoinMiner runtime error: %s\n", e.what());
+                    LogPrintf("LiteDogeMiner runtime error: %s\n", e.what());
                     continue;
                 }
             }
@@ -649,7 +649,7 @@ void PoSMiner(std::shared_ptr<CWallet> pwallet, NodeContext& m_node)
                 }
                 strMintWarning = strMintBlockMessage;
                 uiInterface.NotifyAlertChanged();
-                LogPrintf("Error in PeercoinMiner: Keypool ran out, please call keypoolrefill before restarting the mining thread\n");
+                LogPrintf("Error in LiteDogeMiner: Keypool ran out, please call keypoolrefill before restarting the mining thread\n");
                 if (!connman->interruptNet.sleep_for(std::chrono::seconds(10)))
                    return;
 
@@ -675,7 +675,7 @@ void PoSMiner(std::shared_ptr<CWallet> pwallet, NodeContext& m_node)
                     }
                 catch (const std::runtime_error &e)
                 {
-                    LogPrintf("PeercoinMiner runtime error: %s\n", e.what());
+                    LogPrintf("LiteDogeMiner runtime error: %s\n", e.what());
                     continue;
                 }
                 reservedest.KeepDestination();
@@ -691,12 +691,12 @@ void PoSMiner(std::shared_ptr<CWallet> pwallet, NodeContext& m_node)
     }
     catch (::boost::thread_interrupted)
     {
-        LogPrintf("PeercoinMiner terminated\n");
+        LogPrintf("LiteDogeMiner terminated\n");
         return;
     }
     catch (const std::runtime_error &e)
     {
-        LogPrintf("PeercoinMiner runtime error: %s\n", e.what());
+        LogPrintf("LiteDogeMiner runtime error: %s\n", e.what());
         return;
     }
 }

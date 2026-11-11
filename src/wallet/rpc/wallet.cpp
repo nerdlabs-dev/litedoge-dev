@@ -215,7 +215,7 @@ static RPCHelpMan loadwallet()
 {
     return RPCHelpMan{"loadwallet",
                 "\nLoads a wallet from a wallet file or directory."
-                "\nNote that all wallet command-line options used when starting peercoind will be"
+                "\nNote that all wallet command-line options used when starting litedoged will be"
                 "\napplied to the new wallet.\n",
                 {
                     {"filename", RPCArg::Type::STR, RPCArg::Optional::NO, "The wallet directory or .dat file."},
@@ -699,11 +699,11 @@ static RPCHelpMan reservebalance()
                 "Set reserve amount not participating in network protection.\n",
                 {
                     {"reserve", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "turn balance reserve on or off."},
-                    {"amount", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "amount of peercoin to be reserved."},
+                    {"amount", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "amount of litedoge to be reserved."},
                 },
                 RPCResult{RPCResult::Type::OBJ, "", "", {
                     {RPCResult::Type::BOOL, "reserve", "status of reserve."},
-                    {RPCResult::Type::NUM, "amount", "amount of peercoin reserved."},
+                    {RPCResult::Type::NUM, "amount", "amount of litedoge reserved."},
                 }},
                 RPCExamples{
                     HelpExampleCli("reservebalance", "true 10")

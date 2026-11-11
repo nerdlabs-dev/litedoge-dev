@@ -119,7 +119,7 @@ void AddOutputs(CMutableTransaction& rawTx, const UniValue& outputs_in)
                     rawTx.vout.push_back(out);
                     continue;
                 }
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Peercoin address: ") + name_);
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid LiteDoge address: ") + name_);
             }
 
             if (!destinations.insert(destination).second) {

@@ -22,7 +22,8 @@
  * Text used to signify that a signed message follows and to prevent
  * inadvertently signing a transaction.
  */
-const std::string MESSAGE_MAGIC = "Peercoin Signed Message:\n";
+// LiteDoge: same as the 3.x wallets, so signed messages verify in both
+const std::string MESSAGE_MAGIC = "LiteDoge Signed Message:\n";
 
 MessageVerificationResult MessageVerify(
     const std::string& address,

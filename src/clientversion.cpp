@@ -16,7 +16,7 @@
  * for both bitcoind and bitcoin-qt, to make it harder for attackers to
  * target servers or GUI users specifically.
  */
-const std::string CLIENT_NAME("Satoshi");
+const std::string CLIENT_NAME("LiteDoge");
 
 #define CLIENT_VERSION_SUFFIX ""
 
@@ -64,9 +64,13 @@ std::string FormatFullVersion()
  */
 std::string FormatSubVersion(const std::string& name, int nClientVersion, const std::vector<std::string>& comments)
 {
+    // LiteDoge: "/LiteDoge:3.6.0.2/", the same form as the 3.x wallets
+    // (the port sent "/Satoshi:25.0.0/Peercoin:306.0.2(v0.13.0.0)/").
+    // nClientVersion (Bitcoin Core's version) is not shown.
     std::ostringstream ss;
     ss << "/";
-    ss << name << ":" << FormatVersion(nClientVersion);
+    ss << name << ":" << LITEDOGE_VERSION_MAJOR << "." << LITEDOGE_VERSION_MINOR << "."
+       << LITEDOGE_VERSION_REVISION << "." << LITEDOGE_VERSION_BUILD;
     if (!comments.empty())
     {
         std::vector<std::string>::const_iterator it(comments.begin());
@@ -76,8 +80,6 @@ std::string FormatSubVersion(const std::string& name, int nClientVersion, const 
         ss << ")";
     }
     ss << "/";
-    ss << "Peercoin:" << FormatVersion(LITEDOGE_VERSION);
-    ss << "(" << FormatFullVersion() << ")/";
     return ss.str();
 }
 

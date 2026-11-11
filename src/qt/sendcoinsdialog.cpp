@@ -976,7 +976,7 @@ void SendCoinsDialog::coinControlChangeEdited(const QString& text)
         }
         else if (!IsValidDestination(dest)) // Invalid address
         {
-            ui->labelCoinControlChangeLabel->setText(tr("Warning: Invalid Litedoge address"));
+            ui->labelCoinControlChangeLabel->setText(tr("Warning: Invalid LiteDoge address"));
         }
         else // Valid address
         {

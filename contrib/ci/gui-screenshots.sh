@@ -24,6 +24,18 @@ natpmp=0
 CONF
 rm -rf "$HOME/.config/LiteDoge"
 
+# Make an empty wallet with the daemon first (litedoged and litedoge-cli are
+# next to litedoge-qt), so the wallet pages can be shown
+BINDIR="$(dirname "$BIN")"
+if [ -x "$BINDIR/litedoged" ]; then
+    "$BINDIR/litedoged" -datadir="$DATA" -daemon=0 -server=1 -rpcuser=ci -rpcpassword=ci > /dev/null 2>&1 &
+    D=$!
+    for _ in $(seq 1 30); do "$BINDIR/litedoge-cli" -datadir="$DATA" -rpcuser=ci -rpcpassword=ci getblockcount >/dev/null 2>&1 && break; sleep 1; done
+    "$BINDIR/litedoge-cli" -datadir="$DATA" -rpcuser=ci -rpcpassword=ci createwallet ci || true
+    "$BINDIR/litedoge-cli" -datadir="$DATA" -rpcuser=ci -rpcpassword=ci stop || true
+    wait $D
+fi
+
 Xvfb :99 -screen 0 "${SIZE:-1280x900}x24" >/dev/null 2>&1 &
 XVFB=$!
 export DISPLAY=:99
@@ -43,10 +55,22 @@ for _ in $(seq 1 90); do
     [ -n "$WID" ] && break
     sleep 2
 done
+print_shots() {
+    if [ "${PRINT_SCREENSHOTS_BASE64:-0}" = 1 ]; then
+        for f in "$OUT"/*.png; do
+            [ -f "$f" ] || continue
+            echo "=== BEGIN SCREENSHOT $(basename "$f") ==="
+            base64 -w 1000 "$f"
+            echo "=== END SCREENSHOT ==="
+        done
+    fi
+}
 if [ -z "$WID" ]; then
     echo "The wallet window did not appear"
     import -window root "$OUT/00-screen.png"
+    xdotool search --name '.' getwindowname %@ 2>/dev/null | head -n 20
     cat "$OUT/litedoge-qt.log"
+    print_shots
     cleanup
     exit 1
 fi
@@ -86,12 +110,5 @@ dialog 'Node window'       11-node    ctrl+i
 dialog '^About'            12-about   alt+h a
 
 cleanup
-
-if [ "${PRINT_SCREENSHOTS_BASE64:-0}" = 1 ]; then
-    for f in "$OUT"/*.png; do
-        echo "=== BEGIN SCREENSHOT $(basename "$f") ==="
-        base64 -w 1000 "$f"
-        echo "=== END SCREENSHOT ==="
-    done
-fi
+print_shots
 exit 0

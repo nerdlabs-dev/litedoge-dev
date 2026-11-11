@@ -62,6 +62,7 @@
 #include <QMimeData>
 #include <QProgressDialog>
 #include <QScreen>
+#include <QSslSocket>
 #include <QGuiApplication>
 
 #include <algorithm>
@@ -246,7 +247,8 @@ BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformSty
     connect(labelBlocksIcon, &GUIUtil::ClickableLabel::clicked, this, &BitcoinGUI::showModalOverlay);
     connect(progressBar, &GUIUtil::ClickableProgressBar::clicked, this, &BitcoinGUI::showModalOverlay);
 
-    if(settings.value("bCheckGithub").toBool()) {
+    // (the release builds' Qt has no SSL support, so skip the check there)
+    if(settings.value("bCheckGithub").toBool() && QSslSocket::supportsSsl()) {
         QNetworkAccessManager* nam = new QNetworkAccessManager(this);
         connect(nam, &QNetworkAccessManager::finished, this, &BitcoinGUI::onResult);
         // LiteDoge: latest release on GitHub (was Peercoin's release feed,

@@ -299,7 +299,9 @@ MintingTableModel::MintingTableModel(WalletModel *parent) :
     connect(timer, SIGNAL(timeout()), this, SLOT(updateAge()));
     timer->start(MODEL_UPDATE_DELAY*1000);
 
-    connect(walletModel->getOptionsModel(), SIGNAL(displayUnitChanged(int)), this, SLOT(updateDisplayUnit()));
+    // (the port used the old Qt signal name with an int, which no longer
+    // exists, so the minting list never followed unit changes)
+    connect(walletModel->getOptionsModel(), &OptionsModel::displayUnitChanged, this, &MintingTableModel::updateDisplayUnit);
     m_handler_transaction_changed = walletModel->wallet().handleTransactionChanged(std::bind(NotifyTransactionChanged, this, std::placeholders::_1, std::placeholders::_2));
 }
 

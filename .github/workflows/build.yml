@@ -103,7 +103,10 @@ jobs:
 
       - name: Sync from the LDOGE network
         run: |
-          sudo apt-get install -y libevent-dev libboost-dev libsqlite3-dev libdb5.3++-dev libminiupnpc-dev libnatpmp-dev >/dev/null
+          for i in 1 2 3; do
+            sudo apt-get update >/dev/null && sudo apt-get install -y libevent-dev libboost-dev libsqlite3-dev libdb5.3++-dev libminiupnpc-dev libnatpmp-dev >/dev/null && break
+            sleep 20
+          done
           chmod +x bin/*
           SYNC_MINUTES=55 contrib/ci/sync-test.sh bin
 

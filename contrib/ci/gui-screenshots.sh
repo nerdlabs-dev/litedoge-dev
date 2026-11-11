@@ -52,6 +52,8 @@ cleanup() {
 WID=""
 for _ in $(seq 1 90); do
     WID="$(xdotool search --onlyvisible --name '[Ll]ite[Dd]oge' 2>/dev/null | head -n1)"
+    [ -z "$WID" ] && WID="$(xdotool search --onlyvisible --class 'litedoge' 2>/dev/null | head -n1)"
+    [ -z "$WID" ] && WID="$(xdotool search --onlyvisible --classname 'litedoge' 2>/dev/null | head -n1)"
     [ -n "$WID" ] && break
     sleep 2
 done
@@ -81,6 +83,11 @@ if [ -z "$WID" ]; then
     exit 1
 fi
 sleep 8
+# The sync overlay covers the pages: hide it (it is shown again by the wallet
+# only when asked)
+xdotool windowfocus --sync "$WID" 2>/dev/null; xdotool key Escape; sleep 1
+eval "$(xdotool getwindowgeometry --shell "$WID")"
+xdotool mousemove --window "$WID" $((WIDTH - 96)) $((HEIGHT - 108)) click 1; sleep 1
 echo "Window title: $(xdotool getwindowname "$WID")"
 import -window root "$OUT/00-screen.png"
 

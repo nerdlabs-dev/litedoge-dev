@@ -62,6 +62,9 @@
 #include <QMimeData>
 #include <QProgressDialog>
 #include <QScreen>
+#include <QGuiApplication>
+
+#include <algorithm>
 #include <QSettings>
 #include <QShortcut>
 #include <QStackedWidget>
@@ -99,8 +102,11 @@ BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformSty
 {
     QSettings settings;
     if (!restoreGeometry(settings.value("MainWindowGeometry").toByteArray())) {
-        // Restore failed (perhaps missing setting), center the window
-        move(QGuiApplication::primaryScreen()->availableGeometry().center() - frameGeometry().center());
+        // Restore failed (perhaps missing setting): a size that shows every
+        // tab (as on the FlapX wallet), within the screen, centered
+        const QRect avail = QGuiApplication::primaryScreen()->availableGeometry();
+        resize(std::min(1100, avail.width() * 9 / 10), std::min(760, avail.height() * 9 / 10));
+        move(avail.center() - frameGeometry().center());
     }
 
     setContextMenuPolicy(Qt::PreventContextMenu);
@@ -667,8 +673,11 @@ void BitcoinGUI::createToolBars()
     if(walletFrame)
     {
         QLabel *imageLogo = new QLabel;
-        imageLogo->setPixmap(QPixmap(":/images/logo"));
+        // The logo is drawn at the toolbar's height so it doesn't push the
+        // tabs out of a smaller window (it was full size, 273x77)
+        imageLogo->setPixmap(QPixmap(":/images/logo").scaledToHeight(48, Qt::SmoothTransformation));
         imageLogo->setObjectName("logo");
+        imageLogo->setContentsMargins(8, 0, 12, 0);
         QToolBar *toolbar = addToolBar(tr("Tabs toolbar"));
         appToolBar = toolbar;
         toolbar->setMovable(false);
@@ -702,6 +711,8 @@ void BitcoinGUI::createToolBars()
         m_wallet_selector_label_action->setVisible(false);
         m_wallet_selector_action->setVisible(false);
 #endif
+        // Never let the window get so narrow that tabs disappear
+        setMinimumWidth(std::min(toolbar->sizeHint().width() + 20, QGuiApplication::primaryScreen()->availableGeometry().width()));
     }
 }
 

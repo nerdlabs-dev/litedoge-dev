@@ -268,22 +268,13 @@ bool CheckSequenceLocksAtTip(CBlockIndex* tip,
 static std::array<ThresholdConditionCache, VERSIONBITS_NUM_BITS> warningcache GUARDED_BY(cs_main);
 
 // Returns the script flags which should be checked for a given block
-static unsigned int GetBlockScriptFlags(const CBlockIndex& block_index, const ChainstateManager& chainman);
-
-static void LimitMempoolSize(CTxMemPool& pool, CCoinsViewCache& coins_cache)
-    EXCLUSIVE_LOCKS_REQUIRED(::cs_main, pool.cs)
+static unsigned int GetBlockScriptFlags(const CBlockIndex& block_index, const ChainstateManager& chainman)
 {
-    AssertLockHeld(::cs_main);
-    AssertLockHeld(pool.cs);
-    int expired = pool.Expire(GetTime<std::chrono::seconds>() - pool.m_expiry);
-    if (expired != 0) {
-        LogPrint(BCLog::MEMPOOL, "Expired %i transactions from the memory pool\n", expired);
-    }
-
-    std::vector<COutPoint> vNoSpendsRemaining;
-    pool.TrimToSize(pool.m_max_size_bytes, &vNoSpendsRemaining);
-    for (const COutPoint& removed : vNoSpendsRemaining)
-        coins_cache.Uncache(removed);
+    // LiteDoge: the 3.x wallets check every script with P2SH and nothing else
+    // (no DERSIG, CHECKLOCKTIMEVERIFY, CHECKSEQUENCEVERIFY, NULLDUMMY, segwit or
+    // taproot), so blocks are checked with exactly that. Stricter rules are
+    // still applied to new transactions by the mempool policy.
+    return SCRIPT_VERIFY_P2SH;
 }
 
 void Chainstate::MaybeUpdateMempoolForReorg(
@@ -678,7 +669,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     // Time (prevent mempool memory exhaustion attack)
     // moved from CheckTransaction() to here, because it makes no sense to make GetAdjustedTime() a part of the consensus rules - user can set his clock to whatever he wishes.
     unsigned int nTime = TicksSinceEpoch<std::chrono::seconds>(GetAdjustedTime());
-    if (tx.nTime > nTime + (IsProtocolV09(nTime) ? MAX_FUTURE_BLOCK_TIME : MAX_FUTURE_BLOCK_TIME_PREV9))
+    if (tx.nTime > nTime + LDOGE_FUTURE_DRIFT)
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "timestamp-too-far");
 
     // Coinbase is only valid in a block, not as a loose transaction
@@ -1859,8 +1850,6 @@ DisconnectResult Chainstate::DisconnectBlock(const CBlock& block, const CBlockIn
         // exactly.
         for (size_t o = 0; o < tx.vout.size(); o++) {
             if (!tx.vout[o].scriptPubKey.IsUnspendable()) {
-                if (IsProtocolV12(pindex) && !tx.vout[o].nValue)
-                    continue;
                 COutPoint out(hash, o);
                 Coin coin;
                 bool is_spent = view.SpendCoin(out, &coin);
@@ -2147,7 +2136,6 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // future consensus change to do a new and improved version of BIP34 that
     // will actually prevent ever creating any duplicate coinbases in the
     // future.
-    static constexpr int BIP34_IMPLIES_BIP30_LIMIT = 1983702;
 
     // There is no potential to create a duplicate coinbase at block 209,921
     // because this is still before the BIP34 height and so explicit BIP30
@@ -2184,7 +2172,9 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // TODO: Remove BIP30 checking from block height 1,983,702 on, once we have a
     // consensus change that ensures coinbases at those heights cannot
     // duplicate earlier coinbases.
-    if (fEnforceBIP30 || pindex->nHeight >= BIP34_IMPLIES_BIP30_LIMIT) {
+    // LiteDoge: BIP34 (height in coinbase) has applied since block 1, so the
+    // late-height exception above doesn't apply here
+    if (fEnforceBIP30) {
         for (const auto& tx : block.vtx) {
             for (size_t o = 0; o < tx->vout.size(); o++) {
                 if (view.HaveCoin(COutPoint(tx->GetHash(), o))) {
@@ -2302,7 +2292,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         if (i > 0) {
             blockundo.vtxundo.push_back(CTxUndo());
         }
-        UpdateCoins(tx, view, i == 0 ? undoDummy : blockundo.vtxundo.back(), pindex->nHeight, IsProtocolV12(pindex));
+        UpdateCoins(tx, view, i == 0 ? undoDummy : blockundo.vtxundo.back(), pindex->nHeight, false);
     }
     const auto time_3{SteadyClock::now()};
     time_connect += time_3 - time_2;
@@ -3403,8 +3393,6 @@ void Chainstate::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pin
 
 static bool CheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true)
 {
-    if (block.nNonce == 0) return true;
-
     // Check proof of work matches claimed amount
     if (fCheckPOW && !CheckProofOfWork(block.GetPoWHash(), block.nBits, consensusParams))
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
@@ -3419,7 +3407,8 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
     if (block.fChecked)
         return true;
 
-    const bool fProofOfStake = block.nNonce == 0;
+    // The full block tells us whether it is proof-of-stake
+    const bool fProofOfStake = block.IsProofOfStake();
 
     // Check that the header is valid (particularly PoW).  This is mostly
     // redundant with the call in AcceptBlockHeader.
@@ -3451,8 +3440,8 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
     // Note that witness malleability is checked in ContextualCheckBlock, so no
     // checks that use witness data may be performed here.
 
-    // Size limits
-    if (block.vtx.empty() || block.vtx.size() * WITNESS_SCALE_FACTOR > MAX_BLOCK_WEIGHT || ::GetSerializeSize(block, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS) * WITNESS_SCALE_FACTOR > MAX_BLOCK_WEIGHT)
+    // Size limits (LiteDoge: 1,000,000 bytes)
+    if (block.vtx.empty() || block.vtx.size() > LDOGE_MAX_BLOCK_SIZE || ::GetSerializeSize(block, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS) > LDOGE_MAX_BLOCK_SIZE)
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-length", "size limits failed");
 
     // First transaction must be coinbase, the rest must not be
@@ -3467,16 +3456,16 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
         if (block.vtx[i]->IsCoinStake())
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cs-missing", "coinstake in wrong position");
 
-    // peercoin: first coinbase output should be empty if proof-of-stake block
-    if (block.IsProofOfStake() && !block.vtx[0]->vout[0].IsEmpty())
+    // LiteDoge: a proof-of-stake block's coinbase has exactly one, empty output
+    if (block.IsProofOfStake() && (block.vtx[0]->vout.size() != 1 || !block.vtx[0]->vout[0].IsEmpty()))
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-notempty", "coinbase output not empty in PoS block");
 
     // Check coinbase timestamp
-    if (block.GetBlockTime() > (block.vtx[0]->nTime ? (int64_t)block.vtx[0]->nTime : block.GetBlockTime()) + (IsProtocolV09(block.GetBlockTime()) ? MAX_FUTURE_BLOCK_TIME : MAX_FUTURE_BLOCK_TIME_PREV9))
+    if (block.GetBlockTime() > (int64_t)block.vtx[0]->nTime + LDOGE_FUTURE_DRIFT)
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-time", "coinbase timestamp is too early");
 
     // Check coinstake timestamp
-    if (block.IsProofOfStake() && !CheckCoinStakeTimestamp(block.GetBlockTime(), block.vtx[1]->nTime ? (int64_t)block.vtx[1]->nTime : block.GetBlockTime()))
+    if (block.IsProofOfStake() && !CheckCoinStakeTimestamp(block.GetBlockTime(), (int64_t)block.vtx[1]->nTime))
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cs-time", "coinstake timestamp violation");
 
     // Check transactions
@@ -3489,10 +3478,10 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
             assert(tx_state.GetResult() == TxValidationResult::TX_CONSENSUS);
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, tx_state.GetRejectReason(),
                                  strprintf("Transaction check failed (tx hash %s) %s", tx->GetHash().ToString(), tx_state.GetDebugMessage()));
-            // peercoin: check transaction timestamp
-            if (block.GetBlockTime() < (int64_t)tx->nTime)
-                return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-tx-time", strprintf("%s : block timestamp earlier than transaction timestamp", __func__));
         }
+        // peercoin: check transaction timestamp (this check was unreachable in the port)
+        if (block.GetBlockTime() < (int64_t)tx->nTime)
+            return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-tx-time", strprintf("%s : block timestamp earlier than transaction timestamp", __func__));
     }
     unsigned int nSigOps = 0;
     for (const auto& tx : block.vtx)
@@ -3508,7 +3497,9 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
     // peercoin: check block signature
     // Only check block signature if check merkle root, c.f. commit 3cd01fdf
     // rfc6: validate signatures of proof of stake blocks only after 0.8 fork
-    if (fCheckMerkleRoot && fCheckSignature && (block.IsProofOfStake() && !CheckBlockSignature(block)))
+    // LiteDoge: proof-of-stake blocks are signed by the staker; proof-of-work
+    // blocks must carry no signature
+    if (fCheckMerkleRoot && fCheckSignature && !CheckBlockSignature(block))
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-blk-sign", strprintf("%s : bad block signature", __func__));
 
     return true;
@@ -3555,10 +3546,15 @@ std::vector<unsigned char> ChainstateManager::GenerateCoinbaseCommitment(CBlock&
 
 bool HasValidProofOfWork(const std::vector<CBlockHeader>& headers, const Consensus::Params& consensusParams)
 {
+    // LiteDoge: whether a header is proof-of-work depends on its height (see
+    // IsProofOfStakeHeader), which isn't known here. Only the targets are
+    // sanity checked; ContextualCheckBlockHeader checks the work itself.
     return std::all_of(headers.cbegin(), headers.cend(),
             [&](const auto& header) {
-                bool fPoS = header.nNonce == 0;
-                return fPoS ? true : CheckProofOfWork(header.GetPoWHash(), header.nBits, consensusParams);
+                arith_uint256 target;
+                bool fNegative, fOverflow;
+                target.SetCompact(header.nBits, &fNegative, &fOverflow);
+                return !fNegative && !fOverflow && target != 0 && target <= UintToArith256(consensusParams.powLimit);
             });
 }
 
@@ -3588,10 +3584,12 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
     const int nHeight = pindexPrev->nHeight + 1;
 
     // Check proof of work or proof-of-stake
-    bool fProofOfStake = block.nNonce == 0;
+    const bool fProofOfStake = IsProofOfStakeHeader(block.nNonce, nHeight);
     const Consensus::Params& consensusParams = chainman.GetConsensus();
     if (block.nBits != GetNextTargetRequired(pindexPrev, fProofOfStake, consensusParams))
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-diffbits", "incorrect proof of work/stake");
+    if (!fProofOfStake && !CheckProofOfWork(block.GetPoWHash(), block.nBits, consensusParams))
+        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
 
     // Check against checkpoints
     if (chainman.m_options.checkpoints_enabled) {
@@ -3605,19 +3603,19 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
         }
     }
 
-    // Check timestamp against prev
-    if (block.GetBlockTime() <= pindexPrev->GetMedianTimePast() || block.GetBlockTime() + (IsProtocolV09(block.GetBlockTime()) ? MAX_FUTURE_BLOCK_TIME : MAX_FUTURE_BLOCK_TIME_PREV9) < pindexPrev->GetBlockTime())
+    // Check timestamp against prev (LiteDoge, as the 3.x wallets: from block 3
+    // on, later than the previous block; before that, the median time past)
+    const int64_t nPastLimit = nHeight > 2 ? pindexPrev->GetBlockTime() : pindexPrev->GetMedianTimePast();
+    if (block.GetBlockTime() <= nPastLimit || block.GetBlockTime() + LDOGE_FUTURE_DRIFT < pindexPrev->GetBlockTime())
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-too-old", "block's timestamp is too early");
 
     // Check timestamp
-    if (block.Time() > now + std::chrono::seconds{(IsProtocolV09(block.GetBlockTime()) ? MAX_FUTURE_BLOCK_TIME : MAX_FUTURE_BLOCK_TIME_PREV9)}) {
+    if (block.Time() > now + std::chrono::seconds{LDOGE_FUTURE_DRIFT}) {
         return state.Invalid(BlockValidationResult::BLOCK_TIME_FUTURE, "time-too-new", "block timestamp too far in the future");
     }
 
-    // Reject outdated version blocks when 95% (75% on testnet) of the network has upgraded:
-    // check for version 2, 3 and 4 upgrades
-    if ((block.nVersion < 2 && IsProtocolV06(pindexPrev)) ||
-        (block.nVersion < 4 && IsProtocolV12(pindexPrev))) {
+    // LiteDoge: the 3.x wallets reject block versions above 7
+    if (block.nVersion > CBlockHeader::CURRENT_VERSION) {
             return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, strprintf("bad-version(0x%08x)", block.nVersion),
                                  strprintf("rejected nVersion=0x%08x block", block.nVersion));
     }
@@ -3654,7 +3652,8 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
     }
 
     // Enforce rule that the coinbase starts with serialized block height
-    if (pindexPrev && IsProtocolV06(pindexPrev) && block.nVersion >= 2)
+    // (LiteDoge: every block after the genesis block)
+    if (pindexPrev)
     {
         CScript expect = CScript() << nHeight;
         if (block.vtx[0]->vin[0].scriptSig.size() < expect.size() ||
@@ -3913,9 +3912,16 @@ bool Chainstate::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockV
     if (!accepted_header)
         return false;
 
-    // peercoin: we should only accept blocks that can be connected to a prev block with validated PoS
-    if (fCheckPoS && pindex->pprev && !pindex->pprev->IsValid(BLOCK_VALID_TRANSACTIONS)) {
-        return error("%s: this block does not connect to any valid known block", __func__);
+    // peercoin: the proof-of-stake can only be checked once the previous block
+    // is connected (it needs that block's stake modifier, and the staked
+    // coin's transaction in the transaction index). LiteDoge: when a block
+    // arrives before that (blocks come in out of order from several peers
+    // during the initial sync), store it and check its proof-of-stake when it
+    // is connected (ConnectBlock does that for any block whose stake modifier
+    // hasn't been computed yet) instead of throwing it away and downloading it
+    // again.
+    if (pindex->pprev && !m_chain.Contains(pindex->pprev)) {
+        fCheckPoS = false;
     }
 
     // Try to process all requested blocks that we don't have, but only
@@ -3961,6 +3967,17 @@ bool Chainstate::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockV
             m_blockman.m_dirty_blockindex.insert(pindex);
         }
         return error("%s: %s", __func__, state.ToString());
+    }
+
+    // LiteDoge: the header was taken as proof-of-stake or proof-of-work from
+    // its height and nonce (IsProofOfStakeHeader), and its target checked as
+    // that. The block itself must agree. (This also rejects proof-of-work
+    // after block 8000.)
+    if (block.IsProofOfStake() != pindex->IsProofOfStake()) {
+        pindex->nStatus |= BLOCK_FAILED_VALID;
+        m_blockman.m_dirty_blockindex.insert(pindex);
+        return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, block.IsProofOfStake() ? "bad-pos-nonce" : "bad-pow-height",
+                             strprintf("%s block at height %d", block.IsProofOfStake() ? "proof-of-stake" : "proof-of-work", pindex->nHeight));
     }
 
     // peercoin: check PoS
@@ -4290,7 +4307,7 @@ bool Chainstate::RollforwardBlock(const CBlockIndex* pindex, CCoinsViewCache& in
             }
         }
         // Pass check = true as every addition may be an overwrite.
-        AddCoins(inputs, *tx, pindex->nHeight, true, IsProtocolV12(pindex));
+        AddCoins(inputs, *tx, pindex->nHeight, true, false);
     }
     return true;
 }
@@ -5029,11 +5046,12 @@ bool SignBlock(CBlock& block, const CWallet& keystore)
 // peercoin: check block signature
 bool CheckBlockSignature(const CBlock& block)
 {
-    if (block.GetHash() == Params().GetConsensus().hashGenesisBlock)
+    // LiteDoge (as the 3.x wallets): only proof-of-stake blocks are signed
+    if (block.IsProofOfWork())
         return block.vchBlockSig.empty();
 
     std::vector<valtype> vSolutions;
-    const CTxOut& txout = block.IsProofOfStake()? block.vtx[1]->vout[1] : block.vtx[0]->vout[0];
+    const CTxOut& txout = block.vtx[1]->vout[1];
 
     if (Solver(txout.scriptPubKey, vSolutions) != TxoutType::PUBKEY)
         return false;

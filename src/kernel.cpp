@@ -9,6 +9,7 @@
 #include <timedata.h>
 #include <bignum.h>
 #include <txdb.h>
+#include <consensus/consensus.h>
 #include <consensus/validation.h>
 #include <pow.h>
 #include <util/system.h>
@@ -115,14 +116,9 @@ bool IsProtocolV10(unsigned int nTime)
 // Whether a given timestamp is subject to new v10 protocol
 bool IsProtocolV12(const CBlockIndex* pindexPrev)
 {
-  if (pindexPrev->nTime < (Params().NetworkIDString() != CBaseChainParams::MAIN ? nProtocolV12TestSwitchTime : nProtocolV12SwitchTime))
-      return false;
-
-  if ((Params().NetworkIDString() == CBaseChainParams::MAIN && IsSuperMajority(4, pindexPrev, 900, 1000)) ||
-      (Params().NetworkIDString() != CBaseChainParams::MAIN && IsSuperMajority(4, pindexPrev, 90, 100)))
-    return true;
-
-  return false;
+    // LiteDoge never had Peercoin's v12 changes (taproot, dropping zero-value
+    // outputs from the UTXO set, block version 4+)
+    return false;
 }
 
 // Get the last stake modifier and its generation time from a given block
@@ -254,8 +250,15 @@ bool ComputeNextStakeModifier(const CBlockIndex* pindexCurrent, uint64_t &nStake
         pindex = pindex->pprev;
     }
     int nHeightFirstCandidate = pindex ? (pindex->nHeight + 1) : 0;
-    std::reverse(vSortedByTimestamp.begin(), vSortedByTimestamp.end());
-    std::sort(vSortedByTimestamp.begin(), vSortedByTimestamp.end());
+    // Sort by timestamp, then by block hash compared as a number (as the 3.x
+    // wallets' uint256 did; uint256's own operator< compares bytes in memory
+    // order, which differs)
+    std::sort(vSortedByTimestamp.begin(), vSortedByTimestamp.end(), [] (const pair<int64_t, uint256> &a, const pair<int64_t, uint256> &b)
+    {
+        if (a.first != b.first)
+            return a.first < b.first;
+        return UintToArith256(a.second) < UintToArith256(b.second);
+    });
 
     // Select 64 blocks from candidate blocks to generate stake modifier
     uint64_t nStakeModifierNew = 0;
@@ -506,10 +509,8 @@ bool CheckProofOfStake(BlockValidationState &state, CBlockIndex* pindexPrev, con
 // Check whether the coinstake timestamp meets protocol
 bool CheckCoinStakeTimestamp(int64_t nTimeBlock, int64_t nTimeTx)
 {
-    if (IsProtocolV03(nTimeTx))  // v0.3 protocol
-        return (nTimeBlock == nTimeTx);
-    else // v0.2 protocol
-        return ((nTimeTx <= nTimeBlock) && (nTimeBlock <= nTimeTx + MAX_FUTURE_BLOCK_TIME_PREV9));
+    // LiteDoge PoS v2: the block has the coinstake's timestamp, a multiple of 16 seconds
+    return (nTimeBlock == nTimeTx) && ((nTimeTx & STAKE_TIMESTAMP_MASK) == 0);
 }
 
 // Get stake modifier checksum

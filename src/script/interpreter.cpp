@@ -1323,10 +1323,8 @@ public:
     void Serialize(S &s) const {
         // Serialize nVersion
         ::Serialize(s, txTo.nVersion);
-        if (txTo.nVersion < 3) {
-            // Serialize nTime
-            ::Serialize(s, txTo.nTime);
-        }
+        // Serialize nTime (LiteDoge: always)
+        ::Serialize(s, txTo.nTime);
         // Serialize vin
         unsigned int nInputs = fAnyoneCanPay ? 1 : txTo.vin.size();
         ::WriteCompactSize(s, nInputs);
@@ -1599,10 +1597,8 @@ uint256 SignatureHash(const CScript& scriptCode, const T& txTo, unsigned int nIn
         HashWriter ss{};
         // Version
         ss << txTo.nVersion;
-        if (txTo.nVersion < 3) {
-            // nTime
-            ss << txTo.nTime;
-        }
+        // nTime (LiteDoge: always)
+        ss << txTo.nTime;
         // Input prevouts/nSequence (none/all, depending on flags)
         ss << hashPrevouts;
         ss << hashSequence;

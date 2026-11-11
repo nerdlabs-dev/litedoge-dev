@@ -155,7 +155,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
 
     if (pwallet == nullptr) {
         pblock->nBits = GetNextTargetRequired(pindexPrev, false, chainparams.GetConsensus());
-        coinbaseTx.vout[0].nValue = GetProofOfWorkReward(pblock->nBits, pblock->nTime);
+        coinbaseTx.vout[0].nValue = GetProofOfWorkReward(nHeight, 0);
         }
 
     // Add dummy coinbase tx as first transaction
@@ -171,12 +171,14 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
         *pfPoSCancel = true;
         pblock->nBits = GetNextTargetRequired(pindexPrev, true, chainparams.GetConsensus());
         CMutableTransaction txCoinStake;
+        // LiteDoge PoS v2: coinstake timestamps are multiples of 16 seconds
+        txCoinStake.nTime &= ~STAKE_TIMESTAMP_MASK;
         int64_t nSearchTime = txCoinStake.nTime; // search to current time
         if (nSearchTime > nLastCoinStakeSearchTime)
         {
             if (pwallet->CreateCoinStake(*m_node->chainman, pwallet, pblock->nBits, nSearchTime-nLastCoinStakeSearchTime, txCoinStake))
             {
-                if (txCoinStake.nTime >= std::max(pindexPrev->GetMedianTimePast()+1, pindexPrev->GetBlockTime() - (IsProtocolV09(pindexPrev->GetBlockTime()) ? MAX_FUTURE_BLOCK_TIME : MAX_FUTURE_BLOCK_TIME_PREV9)))
+                if (txCoinStake.nTime > pindexPrev->GetBlockTime())
                 {   // make sure coinstake would meet timestamp protocol
                     // as it would be the same as the block timestamp
                     coinbaseTx.vout[0].SetEmpty();
@@ -193,6 +195,9 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
         pblock->nFlags = CBlockIndex::BLOCK_PROOF_OF_STAKE;
     }
 
+    // LiteDoge: the 3.x wallets accept block versions up to 7
+    pblock->nVersion = CBlockHeader::CURRENT_VERSION;
+
     // -regtest only: allow overriding block.nVersion with
     // -blockversion=N to test forking scenarios
     if (chainparams.MineBlocksOnDemand()) {
@@ -200,6 +205,10 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     }
 
     pblock->nTime = TicksSinceEpoch<std::chrono::seconds>(GetAdjustedTime());
+    // A PoS block gets its coinstake's (rounded down) time, so only take
+    // transactions that aren't newer than that
+    if (pblock->IsProofOfStake())
+        pblock->nTime = pblock->vtx[1]->nTime;
     m_lock_time_cutoff = pindexPrev->GetMedianTimePast();
 
     int nPackagesSelected = 0;
@@ -225,10 +234,10 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     pblock->hashPrevBlock  = pindexPrev->GetBlockHash();
     if (pblock->IsProofOfStake())
         pblock->nTime      = pblock->vtx[1]->nTime; //same as coinstake timestamp
-    pblock->nTime          = std::max(pindexPrev->GetMedianTimePast()+1, pblock->GetMaxTransactionTime());
-    pblock->nTime          = std::max(pblock->GetBlockTime(), pindexPrev->GetBlockTime() - (IsProtocolV09(pindexPrev->GetBlockTime()) ? MAX_FUTURE_BLOCK_TIME : MAX_FUTURE_BLOCK_TIME_PREV9));
-    if (pblock->IsProofOfWork())
+    else {
+        pblock->nTime      = std::max(pindexPrev->GetBlockTime()+1, pblock->GetMaxTransactionTime());
         UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev);
+    }
     pblock->nNonce         = 0;
     pblocktemplate->vTxSigOpsCost[0] = WITNESS_SCALE_FACTOR * GetLegacySigOpCount(*pblock->vtx[0]);
 
@@ -714,6 +723,8 @@ void static ThreadStakeMinter(std::shared_ptr<CWallet> pwallet, NodeContext& m_n
 // peercoin: stake minter
 void MintStake(std::shared_ptr<CWallet> pwallet, NodeContext& m_node)
 {
-    m_minter_thread = std::thread([&] { util::TraceThread("minter", [&] { ThreadStakeMinter(pwallet, m_node); }); });
+    // (pwallet is captured by value: the port captured this function's
+    // parameter by reference, which is gone by the time the thread runs)
+    m_minter_thread = std::thread([pwallet, &m_node] { util::TraceThread("minter", [&] { ThreadStakeMinter(pwallet, m_node); }); });
 }
 } // namespace node

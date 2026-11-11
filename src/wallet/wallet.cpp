@@ -3558,7 +3558,10 @@ bool CWallet::CreateCoinStake(ChainstateManager& chainman, const CWallet* pwalle
     // The following split & combine thresholds are important to security
     // Should not be adjusted if you don't understand the consequences
     static unsigned int nStakeSplitAge = (60 * 60 * 24 * 90);
-    int64_t nCombineThreshold = GetProofOfWorkReward(GetLastBlockIndex(chainman.ActiveChain().Tip(), false)->nBits, txNew.nTime) / 3;
+    // Combine small coins of the kernel's address into the coinstake, up to this
+    // much. (The port computed it from a Peercoin PoW reward formula that
+    // LiteDoge doesn't have, which always came out as 0.)
+    int64_t nCombineThreshold = 10000 * COIN;
 
     CBigNum bnTargetPerCoinDay;
     bnTargetPerCoinDay.SetCompact(nBits);
@@ -3634,7 +3637,9 @@ bool CWallet::CreateCoinStake(ChainstateManager& chainman, const CWallet* pwalle
             continue; // only count coins meeting min age requirement
 
         bool fKernelFound = false;
-        for (unsigned int n=0; n<std::min(nSearchInterval,(int64_t)nMaxStakeSearchInterval) && !fKernelFound; n++)
+        // LiteDoge PoS v2: only timestamps that are multiples of 16 seconds
+        // (txNew.nTime is already one) can be used
+        for (unsigned int n=0; n<std::min(nSearchInterval,(int64_t)nMaxStakeSearchInterval) && !fKernelFound; n += STAKE_TIMESTAMP_MASK + 1)
         {
             // Search backward in time from the given txNew timestamp
             // Search nSearchInterval seconds back up to nMaxStakeSearchInterval
@@ -3762,7 +3767,9 @@ bool CWallet::CreateCoinStake(ChainstateManager& chainman, const CWallet* pwalle
     }
 
     {
-        CAmount nReward = GetProofOfStakeReward(chainman.ActiveChain().Tip()->pprev->nHeight, 0);
+        // The reward is set by the height of the block being staked on (the
+        // tip), as in validation (the port used the tip's parent)
+        CAmount nReward = GetProofOfStakeReward(chainman.ActiveChain().Tip()->nHeight, 0);
         // Refuse to create mint that has zero or negative reward
         if(nReward <= 0) {
             return false;
@@ -3770,8 +3777,9 @@ bool CWallet::CreateCoinStake(ChainstateManager& chainman, const CWallet* pwalle
         nCredit += nReward;
     }
 
+    // LiteDoge: coinstakes pay no fee
     CAmount nMinFee = 0;
-    CAmount nMinFeeBase = (IsProtocolV07(txNew.nTime) ? MIN_TX_FEE : MIN_TX_FEE_PREV7);
+    CAmount nMinFeeBase = CENT; // the first split output is rounded to this
     while(true)
     {
         // Set output amount
@@ -3807,6 +3815,8 @@ bool CWallet::CreateCoinStake(ChainstateManager& chainman, const CWallet* pwalle
             int nTime = txNew.nTime;
             bool complete = pwallet->SignTransaction(txNew, coins, SIGHASH_ALL, input_errors);
             txNew.nTime = nTime;
+            if (!complete)
+                return error("CreateCoinStake : failed to sign coinstake");
         }
 
         // Limit size
@@ -3814,18 +3824,7 @@ bool CWallet::CreateCoinStake(ChainstateManager& chainman, const CWallet* pwalle
         if (nBytes >= 1000000/5)
             return error("CreateCoinStake : exceeded coinstake size limit");
 
-        // Check enough fee is paid
-        if (nMinFee < GetMinFee(CTransaction(txNew), txNew.nTime) - nMinFeeBase)
-        {
-            nMinFee = GetMinFee(CTransaction(txNew), txNew.nTime) - nMinFeeBase;
-            continue; // try signing again
-        }
-        else
-        {
-            if (bDebug)
-                LogPrintf("CreateCoinStake : fee for coinstake %s\n", FormatMoney(nMinFee).c_str());
-            break;
-        }
+        break;
     }
 
     // Successfully generated coinstake

@@ -49,7 +49,7 @@ unsigned int GetNextTargetRequired(const CBlockIndex* pindexLast, bool fProofOfS
     bnNew *= ((nInterval - 1) * nTargetSpacing + nActualSpacing + nActualSpacing);
     bnNew /= ((nInterval + 1) * nTargetSpacing);
 
-    if (bnNew > CBigNum(params.powLimit))
+    if (bnNew <= 0 || bnNew > CBigNum(params.powLimit))
         bnNew = CBigNum(params.powLimit);
 
     return bnNew.GetCompact();

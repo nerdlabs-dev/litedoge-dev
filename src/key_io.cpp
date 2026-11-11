@@ -90,6 +90,12 @@ CTxDestination DecodeDestination(const std::string& str, const CChainParams& par
         dec = bech32::Decode(str);
         is_bech32 = (dec.encoding != bech32::Encoding::INVALID);
     }
+    // LiteDoge has no segwit: coins sent to a segwit address could be spent by
+    // anyone on the LiteDoge network, so those addresses are never accepted
+    if (is_bech32) {
+        error_str = "LiteDoge does not support segwit (bech32) addresses";
+        return CNoDestination();
+    }
 
     if (!is_bech32 && DecodeBase58Check(str, data, 21)) {
         // base58-encoded Bitcoin addresses.

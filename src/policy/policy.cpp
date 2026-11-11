@@ -35,6 +35,10 @@ bool IsStandard(const CScript& scriptPubKey, const std::optional<unsigned>& max_
 
     if (whichType == TxoutType::NONSTANDARD) {
         return false;
+    } else if (whichType == TxoutType::WITNESS_V0_KEYHASH || whichType == TxoutType::WITNESS_V0_SCRIPTHASH ||
+               whichType == TxoutType::WITNESS_V1_TAPROOT || whichType == TxoutType::WITNESS_UNKNOWN) {
+        // LiteDoge has no segwit: such outputs are anyone-can-spend there
+        return false;
     } else if (whichType == TxoutType::MULTISIG) {
         unsigned char m = vSolutions.front()[0];
         unsigned char n = vSolutions.back()[0];

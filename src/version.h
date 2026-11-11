@@ -9,14 +9,17 @@
  * network protocol versioning
  */
 
-static const int PROTOCOL_VERSION = 60066;
+// LiteDoge: the 3.6 wallets speak 60069 and refuse peers below 60067 (the
+// port had 60066, so every 3.x node would have dropped it). Stay at or above
+// the highest version in use so wallets in the wild keep talking to us.
+static const int PROTOCOL_VERSION = 60070;
 static const int OLD_VERSION = PROTOCOL_VERSION;
 
 //! initial proto version, to be increased after version/verack negotiation
 static const int INIT_PROTO_VERSION = 209;
 
-//! disconnect from peers older than this proto version
-static const int MIN_PEER_PROTO_VERSION = PROTOCOL_VERSION;
+//! disconnect from peers older than this proto version (the 3.x wallets' own minimum)
+static const int MIN_PEER_PROTO_VERSION = 60067;
 
 //! BIP 0031, pong message, is enabled for all versions AFTER this one
 static const int BIP0031_VERSION = 60000;

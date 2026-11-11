@@ -213,8 +213,9 @@ bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, 
         if (!MoneyRange(txfee_aux)) {
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-fee-outofrange");
         }
-        // peercoin: enforce transaction fees for every block
-        if (txfee_aux < GetMinFee(tx, nTimeTx))
+        // LiteDoge: every transaction in a block pays at least the flat
+        // minimum fee (same rule as the 3.x wallets' ConnectInputs)
+        if (txfee_aux < LiteDogeBlockMinTxFee(nSpendHeight))
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-fee-not-enough");
         txfee = txfee_aux;
     }
@@ -227,13 +228,11 @@ CAmount GetMinFee(const CTransaction& tx, unsigned int nTimeTx)
     return GetMinFee(nBytes, nTimeTx);
 }
 
+// LiteDoge: the fee the 3.x wallets need before they relay a transaction (and
+// what they pay themselves): 0.1 LDOGE for each started 1000 bytes.
 CAmount GetMinFee(size_t nBytes, uint32_t nTime)
 {
-    CAmount nMinFee;
-    if (IsProtocolV07(nTime) || !nTime) // RFC-0007
-        nMinFee = (nBytes < 100) ? MIN_TX_FEE : (CAmount)(nBytes * (PERKB_TX_FEE / 1000));
-    else
-        nMinFee = (1 + (CAmount)nBytes / 1000) * PERKB_TX_FEE;
+    CAmount nMinFee = (1 + (CAmount)nBytes / 1000) * LDOGE_MIN_TX_FEE_V2;
 
     if (!MoneyRange(nMinFee))
         nMinFee = MAX_MONEY;

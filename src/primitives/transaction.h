@@ -230,10 +230,9 @@ inline void UnserializeTransaction(TxType& tx, Stream& s) {
     const bool fAllowWitness = !(s.GetVersion() & SERIALIZE_TRANSACTION_NO_WITNESS);
 
     s >> tx.nVersion;
-    if (tx.nVersion < 3)
-        s >> tx.nTime;
-    else
-        tx.nTime = 0;
+    // LiteDoge: every transaction has a timestamp, whatever its version
+    // (unlike Peercoin, which dropped it from version 3 on)
+    s >> tx.nTime;
 
     unsigned char flags = 0;
     tx.vin.clear();
@@ -274,8 +273,7 @@ inline void SerializeTransaction(const TxType& tx, Stream& s) {
     const bool fAllowWitness = !(s.GetVersion() & SERIALIZE_TRANSACTION_NO_WITNESS);
 
     s << tx.nVersion;
-    if (tx.nVersion<3)
-        s << tx.nTime;
+    s << tx.nTime; // LiteDoge: always
     unsigned char flags = 0;
     // Consistency check
     if (fAllowWitness) {
@@ -314,7 +312,8 @@ class CTransaction
 {
 public:
     // Default transaction version.
-    static const int32_t CURRENT_VERSION=3;
+    // LiteDoge: version 1, the only version the 3.x wallets relay
+    static const int32_t CURRENT_VERSION=1;
 
     // The local variables are made const to prevent unintended modification
     // without updating the cached hash value. However, CTransaction is not

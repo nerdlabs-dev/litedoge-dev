@@ -542,8 +542,7 @@ class CTransaction:
 
     def deserialize(self, f):
         self.nVersion = struct.unpack("<i", f.read(4))[0]
-        if self.nVersion < 3:
-            self.nTime = struct.unpack("<I", f.read(4))[0]
+        self.nTime = struct.unpack("<I", f.read(4))[0]  # LiteDoge: always
         self.vin = deser_vector(f, CTxIn)
         flags = 0
         if len(self.vin) == 0:
@@ -567,8 +566,7 @@ class CTransaction:
     def serialize_without_witness(self):
         r = b""
         r += struct.pack("<i", self.nVersion)
-        if self.nVersion < 3:
-            r += struct.pack("<I", self.nTime)
+        r += struct.pack("<I", self.nTime)  # LiteDoge: always
         r += ser_vector(self.vin)
         r += ser_vector(self.vout)
         r += struct.pack("<I", self.nLockTime)
@@ -581,8 +579,7 @@ class CTransaction:
             flags |= 1
         r = b""
         r += struct.pack("<i", self.nVersion)
-        if self.nVersion < 3:
-            r += struct.pack("<I", self.nTime)
+        r += struct.pack("<I", self.nTime)  # LiteDoge: always
         if flags:
             dummy = []
             r += ser_vector(dummy)

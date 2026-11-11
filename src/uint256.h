@@ -61,10 +61,14 @@ public:
     friend constexpr bool operator!=(const base_blob& a, const base_blob& b) { return a.Compare(b) != 0; }
     friend constexpr bool operator<(const base_blob& a, const base_blob& b) { return a.Compare(b) < 0; }
 
+    /** The lowest 64 bits, as a number (the bytes are stored little-endian).
+     *  (The port's version combined two single bytes.) */
     uint64_t GetLow64() const
     {
-        assert(WIDTH >= 2);
-        return m_data[0] | (uint64_t)m_data[1] << 32;
+        static_assert(WIDTH >= 8);
+        uint64_t r = 0;
+        for (int i = 7; i >= 0; --i) r = (r << 8) | m_data[i];
+        return r;
     }
 
     std::string GetHex() const;

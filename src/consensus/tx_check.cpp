@@ -5,6 +5,7 @@
 #include <consensus/tx_check.h>
 
 #include <consensus/amount.h>
+#include <consensus/consensus.h>
 #include <primitives/transaction.h>
 #include <consensus/validation.h>
 #include <chainparams.h>
@@ -22,13 +23,16 @@ bool CheckTransaction(const CTransaction& tx, TxValidationState& state)
     if (tx.vout.empty())
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-vout-empty");
     // Size limits (this doesn't take the witness into account, as that hasn't been checked for malleability)
-    if (::GetSerializeSize(tx, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS) * WITNESS_SCALE_FACTOR > MAX_BLOCK_WEIGHT)
+    if (::GetSerializeSize(tx, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS) > LDOGE_MAX_BLOCK_SIZE)
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-oversize");
 
     // Check for negative or overflow output values (see CVE-2010-5139)
     CAmount nValueOut = 0;
     for (const auto& txout : tx.vout)
     {
+        // LiteDoge: only the coinbase and coinstake may have empty outputs
+        if (txout.IsEmpty() && !tx.IsCoinBase() && !tx.IsCoinStake())
+            return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-vout-empty-user");
         if (txout.nValue < 0)
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-vout-negative");
         if (txout.nValue > MAX_MONEY)
@@ -37,10 +41,6 @@ bool CheckTransaction(const CTransaction& tx, TxValidationState& state)
         if (!MoneyRange(nValueOut))
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-txouttotal-toolarge");
 
-        // peercoin: enforce minimum output amount
-        //if ((!txout.IsEmpty()) && txout.nValue < MIN_TXOUT_AMOUNT &&
-        //    (tx.nVersion < 3 && !(IsZeroAllowed(tx.nTime) && (txout.nValue == 0))))
-        //    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-txoutvalue-belowminimum");
     }
 
     // Check for duplicate inputs (see CVE-2018-17144)

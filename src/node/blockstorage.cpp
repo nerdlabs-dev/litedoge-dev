@@ -4,6 +4,8 @@
 
 #include <node/blockstorage.h>
 
+#include <consensus/consensus.h>
+
 #include <chain.h>
 #include <clientversion.h>
 #include <consensus/validation.h>
@@ -101,6 +103,14 @@ CBlockIndex* BlockManager::AddToBlockIndex(const CBlockHeader& block, CBlockInde
         pindexNew->pprev = &(*miPrev).second;
         pindexNew->nHeight = pindexNew->pprev->nHeight + 1;
         pindexNew->BuildSkip();
+    }
+    // LiteDoge: old peers send headers without the PoS flag, so it is worked
+    // out from the height and nonce (checked against the full block later)
+    if (pindexNew->pprev) {
+        if (IsProofOfStakeHeader(block.nNonce, pindexNew->nHeight))
+            pindexNew->nFlags |= CBlockIndex::BLOCK_PROOF_OF_STAKE;
+        else
+            pindexNew->nFlags &= ~CBlockIndex::BLOCK_PROOF_OF_STAKE;
     }
     pindexNew->nTimeMax = (pindexNew->pprev ? std::max(pindexNew->pprev->nTimeMax, pindexNew->nTime) : pindexNew->nTime);
     pindexNew->nChainTrust = (pindexNew->pprev ? pindexNew->pprev->nChainTrust : 0) + GetBlockTrust(*pindexNew);

@@ -1,385 +1,263 @@
-name: Continuous Integration
+# Builds LiteDoge on GitHub's build machines:
+#   - quick-check   Linux build against Ubuntu's own libraries (fast compile check,
+#                   also provides the litedoged used by the sync test)
+#   - sync-test     runs that litedoged on the real LDOGE network for a while and
+#                   reports how far it got and whether any block was rejected
+#   - linux-gui     release Linux binaries (litedoge-qt, litedoged, litedoge-cli),
+#                   libraries built from depends/ and linked in
+#   - windows-gui   release Windows binaries (litedoge-qt.exe, litedoged.exe,
+#                   litedoge-cli.exe), cross-compiled, statically linked
+#
+# Every push keeps the binaries as downloadable "artifacts" on the run's page.
+# Pushing a version tag (e.g. v3.6.0.2) also publishes them as a GitHub release.
+
+name: Build
 
 on:
   push:
-    paths-ignore:
-      - '**/*.md'
+    branches: [ main, modern ]
+    tags: [ 'v*' ]
+    paths-ignore: [ '**.md', 'doc/**' ]
   pull_request:
-    paths-ignore:
-      - 'doc/**'
-      - 'contrib/**'
-      - '**/*.md'
+    paths-ignore: [ '**.md', 'doc/**' ]
+  workflow_dispatch:
+
+# A newer push to the same branch cancels a build that's still running;
+# release (tag) builds are never cancelled
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+permissions:
+  contents: write
 
 env:
-  MAKEJOBS: 3
-  DOCKER_BUILDKIT: 1
-  GITIAN_DIR: /opt/gitian-builder
-  GITIAN_CACHE: /opt/gitian-builder/cache
-  DEBIAN_FRONTEND: noninteractive
-  USE_DOCKER: 1
+  CCACHE_COMPILERCHECK: content
+  CCACHE_MAXSIZE: 1G
+  # Libraries we don't use: ZeroMQ notifications, tracing, multiprocess
+  DEPENDS_OPTS: NO_ZMQ=1 NO_USDT=1 NO_MULTIPROCESS=1
+  CONFIGURE_OPTS: --disable-tests --disable-bench --disable-fuzz-binary --enable-reduce-exports --with-gui=qt5
 
 jobs:
-  binary:
-    runs-on: ubuntu-20.04
-    container: docker:stable-dind
-    strategy:
-      matrix:
-        name:
-          - armhf-linux
-          - aarch64-linux
-          - x86_64-linux
-          - x86_64-macos
-          - x86_64-win
-        include:
-          - os: linux
-            name: armhf-linux
-            host: arm-linux-gnueabihf
-          - os: linux
-            name: aarch64-linux
-            host: aarch64-linux-gnu
-          - os: linux
-            name: x86_64-linux
-            host: x86_64-linux-gnu
-          - os: osx
-            name: x86_64-macos
-            host: x86_64-apple-darwin16
-          - os: win
-            name: x86_64-win
-            host: x86_64-w64-mingw32
+  quick-check:
+    name: Quick Linux build (system libraries)
+    runs-on: ubuntu-24.04
     steps:
-      - name: Set up environment
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
         run: |
-          apk add --no-cache curl make ruby wget git sed tar grep bash
-          git clone https://github.com/devrandom/gitian-builder.git ${GITIAN_DIR}
-          mkdir -p ${GITIAN_DIR}/inputs ${GITIAN_DIR}/var
-          wget https://github.com/mikefarah/yq/releases/download/v4.13.5/yq_linux_amd64.tar.gz -O - |\
-            tar xz && mv yq_linux_amd64 /usr/bin/yq
+          sudo apt-get update
+          sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config \
+            bsdmainutils python3 ccache libevent-dev libboost-dev libsqlite3-dev libdb5.3++-dev \
+            libminiupnpc-dev libnatpmp-dev libssl-dev qtbase5-dev qttools5-dev qttools5-dev-tools \
+            libqrencode-dev
 
-      - name: Fetch OSX SDK
-        if: ${{ matrix.os == 'osx' }}
-        run: wget -N https://bitcoincore.org/depends-sources/sdks/Xcode-12.2-12B45b-extracted-SDK-with-libcxx-headers.tar.gz -O ${GITIAN_DIR}/inputs/Xcode-12.2-12B45b-extracted-SDK-with-libcxx-headers.tar.gz
-
-      - uses: actions/checkout@v3
-
-      - name: Detect suite
-        id: detect
-        shell: bash
-        run: |
-          DESCRIPTOR=$PWD/contrib/gitian-descriptors/gitian-${{ matrix.os }}.yml
-          NAME=$(yq e '.name' ${DESCRIPTOR})
-          COMMIT_OR_TAG=$(git log --format="%H" -n 1)
-          FETCH_TAGS=""
-          if [[ $GITHUB_REF == refs/tags/v* ]]; then
-            COMMIT_OR_TAG=$(echo ${GITHUB_REF/refs\/tags\//})
-            FETCH_TAGS="--fetch-tags"
-          fi
-          echo "descriptor=${DESCRIPTOR}" >> $GITHUB_OUTPUT
-          echo "name=${NAME}" >> $GITHUB_OUTPUT
-          echo "version=$(echo ${NAME} | grep -Eo [0-9.]+)" >> $GITHUB_OUTPUT
-          echo "suite=$(yq e '.suites[0]' ${DESCRIPTOR})" >> $GITHUB_OUTPUT
-          echo "architecture=$(yq e '.architectures[0]' ${DESCRIPTOR})" >> $GITHUB_OUTPUT
-          echo "build-dir=${PWD}" >> $GITHUB_OUTPUT
-          echo "commit-or-tag=${COMMIT_OR_TAG}" >> $GITHUB_OUTPUT
-          echo "fetch-tags=${FETCH_TAGS}" >> $GITHUB_OUTPUT
-
-      - name: Build gitian base image
-        run: |
-          docker build --tag base-${{ steps.detect.outputs.suite }}-${{ steps.detect.outputs.architecture }} -<<EOF
-            FROM ubuntu:${{ steps.detect.outputs.suite }}
-            ENV DEBIAN_FRONTEND=noninteractive
-            RUN apt-get update && apt-get --no-install-recommends -y install pciutils build-essential git subversion language-pack-en wget lsb-release
-            RUN useradd -ms /bin/bash -U ubuntu
-            USER ubuntu:ubuntu
-            WORKDIR /home/ubuntu
-            CMD ["sleep", "infinity"]
-          EOF
-
-      - name: Cache dependencies
-        uses: actions/cache@v3
-        id: gitian-deps
-        env:
-          cache-name: gitian-host
+      - uses: actions/cache@v4
         with:
-          path: ${{ env.GITIAN_CACHE }}/${{ steps.detect.outputs.name }}/${{ matrix.host }}
-          key: ${{ matrix.name }}-${{ env.cache-name }}-${{ hashFiles('depends/packages/*') }}
+          path: ${{ runner.temp }}/ccache
+          key: ccache-quick-${{ github.sha }}
+          restore-keys: ccache-quick-
 
-      - name: Build binary
-        working-directory: ${{ env.GITIAN_DIR }}
+      - name: Build
         run: |
-          sed -i "s/^\ \ \(HOSTS=\"\).*/\ \ \1${{ matrix.host }}\"/g" ${{ steps.detect.outputs.descriptor }}
-          ./bin/gbuild -j $MAKEJOBS ${{ steps.detect.outputs.fetch-tags }} --commit peercoin=${{ steps.detect.outputs.commit-or-tag }} --url peercoin=${{ github.server_url }}/${{ github.repository }} ${{ steps.detect.outputs.descriptor }}
-          cp -r ${GITIAN_DIR}/build/out/* ${{ steps.detect.outputs.build-dir }}/
+          export CCACHE_DIR="$RUNNER_TEMP/ccache"
+          ./autogen.sh
+          ./configure --with-incompatible-bdb --disable-bench --disable-fuzz-binary --with-gui=qt5 \
+            --enable-werror=no CXXFLAGS="-O2 -g0"
+          make -j"$(nproc)" -k 2>&1 | tee build.log
+          test "${PIPESTATUS[0]}" -eq 0 || { echo "::group::Errors"; grep -n -B2 -A6 'error:' build.log | head -300; echo "::endgroup::"; exit 1; }
+          ccache -s
 
-      - name: Get short SHA
-        id: slug
-        run: echo "sha8=$(echo ${{ github.sha }} | cut -c1-8)" >> $GITHUB_OUTPUT
+      - name: Unit tests
+        continue-on-error: true
+        run: |
+          timeout 1200 make -j"$(nproc)" check VERBOSE=1 2>&1 | tail -n 200
 
-      - uses: actions/upload-artifact@v3
+      - name: Check the binaries
+        run: |
+          ./src/litedoged -version | head -n 3
+          ./src/litedoge-cli -version | head -n 1
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: peercoin-${{ steps.slug.outputs.sha8 }}-${{ matrix.name }}
+          name: quick-check-litedoged
           path: |
-            *.tar.gz
-            *.zip
-            *.exe
-            *.dmg
-            !*-debug*
-            !*-unsigned.tar.gz
-          retention-days: 5
-          if-no-files-found: error
-  docker:
-    runs-on: ubuntu-20.04
-    needs: [binary]
+            src/litedoged
+            src/litedoge-cli
+
+  sync-test:
+    name: Mainnet sync test
+    needs: quick-check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
-          repository: peercoin/packaging
+          sparse-checkout: contrib/ci
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
-          path: docker
+          name: quick-check-litedoged
+          path: bin
 
-      - name: Place artifacts
-        working-directory: docker
+      - name: Sync from the LDOGE network
         run: |
-          mkdir -p linux/amd64 linux/arm/v7 linux/arm64
-          mv peercoin-*-x86_64-linux/peercoin-*-x86_64-linux-gnu.tar.gz linux/amd64/
-          mv peercoin-*-armhf-linux/peercoin-*-arm-linux-gnueabihf.tar.gz linux/arm/v7/
-          mv peercoin-*-aarch64-linux/peercoin-*-aarch64-linux-gnu.tar.gz linux/arm64/
+          sudo apt-get install -y libevent-dev libboost-dev libsqlite3-dev libdb5.3++-dev libminiupnpc-dev libnatpmp-dev >/dev/null
+          chmod +x bin/*
+          SYNC_MINUTES=55 contrib/ci/sync-test.sh bin
 
-      - uses: docker/setup-qemu-action@v2
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          platforms: arm,arm64
+          name: sync-test-debug-log
+          path: sync-test/*.log
 
-      - uses: docker/setup-buildx-action@v2
-        with:
-          platforms: linux/amd64,linux/arm64,linux/arm/v7
-
-      - name: Detect env
-        id: detect
-        shell: bash
-        run: |
-          PUSH=false
-          TAG_NAME=blank
-          if [[ $GITHUB_REF == refs/heads/develop ]]; then
-            PUSH=true
-            TAG_NAME=develop
-          fi
-          if [[ $GITHUB_REF == refs/heads/master ]]; then
-            PUSH=true
-            TAG_NAME=latest
-          fi
-          if [[ $GITHUB_REF == refs/heads/release-* ]]; then
-            PUSH=true
-            TAG_NAME=${GITHUB_REF/refs\/heads\//}
-          fi
-          if [[ $GITHUB_REF == refs/tags/v* ]]; then
-            PUSH=true
-            TAG_NAME=${GITHUB_REF/refs\/tags\//}
-            TAG_NAME=${TAG_NAME/ppc\./}
-            TAG_NAME=${TAG_NAME/ppc/}
-            TAG_NAME=${TAG_NAME/v/}
-          fi
-          echo "push=${PUSH}" >> $GITHUB_OUTPUT
-          echo "tag-name=${TAG_NAME}" >> $GITHUB_OUTPUT
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
-        if: steps.detect.outputs.push == 'true'
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
-        if: steps.detect.outputs.push == 'true'
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
-      - name: Build and push
-        working-directory: docker
-        run: |
-          docker buildx build --platform linux/amd64,linux/arm/v7,linux/arm64 \
-            --output "type=image,push=${{ steps.detect.outputs.push }}" \
-            --progress=plain \
-            --tag peercoin/peercoind:${{ steps.detect.outputs.tag-name }} \
-            --tag ghcr.io/${{ github.repository }}/peercoind:${{ steps.detect.outputs.tag-name }} \
-          .
-  appimage:
-    runs-on: ubuntu-20.04
-    needs: [binary]
-    strategy:
-      matrix:
-        name:
-          - armhf
-          - aarch64
-          - x86_64
-        include:
-          - name: armhf
-            host: arm-linux-gnueabihf
-            sources_repo: http://ports.ubuntu.com/ubuntu-ports
-            apt_arch: armhf
-          - name: aarch64
-            host: aarch64-linux-gnu
-            sources_repo: http://ports.ubuntu.com/ubuntu-ports
-            apt_arch: arm64
-          - name: x86_64
-            host: x86_64-linux-gnu
-            sources_repo: http://archive.ubuntu.com/ubuntu
-            apt_arch: amd64
+  linux-gui:
+    name: Linux release (depends)
+    runs-on: ubuntu-22.04
+    env:
+      HOST: x86_64-linux-gnu
     steps:
-      - uses: actions/checkout@v3
-        with:
-          repository: peercoin/packaging
+      - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v3
-        with:
-          path: appimage
-
-      - name: Set up environment
-        working-directory: appimage
+      - name: Install build tools
         run: |
-          pip3 install --upgrade pyOpenSSL git+https://github.com/AppImageCrafters/appimage-builder@3396839c9e3419f4bd726cb129e54e6da4212e48
+          sudo apt-get update
+          sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config \
+            bsdmainutils python3 curl cmake ccache bison
 
-      - name: Detect env
-        id: detect
-        shell: bash
-        run: |
-          SHA8=$(echo ${{ github.sha }} | cut -c1-8)
-          TAG_NAME=$SHA8
-          if [[ $GITHUB_REF == refs/tags/v* ]]; then
-            TAG_NAME=${GITHUB_REF/refs\/tags\//}
-            TAG_NAME=${TAG_NAME/ppc\./}
-            TAG_NAME=${TAG_NAME/ppc/}
-            TAG_NAME=${TAG_NAME/v/}
-          fi
-          echo "sha8=$SHA8" >> $GITHUB_OUTPUT
-          echo "tag-name=$TAG_NAME" >> $GITHUB_OUTPUT
-          echo "build-dir=${PWD}" >> $GITHUB_OUTPUT
-
-      - name: Build AppImage
-        working-directory: appimage
-        run: |
-          tar xzf peercoin-${{ steps.detect.outputs.sha8 }}-${{ matrix.name }}-linux/peercoin-*-${{ matrix.host }}.tar.gz -C AppDir --strip-components=1
-          find AppDir/bin ! -name 'peercoin-qt' -type f -exec rm -f {} +
-          VERSION=${{ steps.detect.outputs.tag-name }} SOURCES_REPO=${{ matrix.sources_repo }} APT_ARCH=${{ matrix.apt_arch }} BUILD_ARCH=${{ matrix.name }} appimage-builder --skip-tests
-          mv *.AppImage ${{ steps.detect.outputs.build-dir }}/
-
-      - uses: actions/upload-artifact@v3
+      - uses: actions/cache@v4
+        id: depends
         with:
-          name: peercoin-appimage-${{ steps.detect.outputs.tag-name }}-${{ matrix.name }}
           path: |
-            *.AppImage
-          retention-days: 5
+            depends/built
+            depends/sources
+          key: depends-${{ env.HOST }}-${{ hashFiles('depends/packages/**', 'depends/patches/**', 'depends/hosts/**', 'depends/builders/**', 'depends/Makefile', 'depends/funcs.mk') }}
+
+      - name: Build libraries (depends)
+        run: make -C depends HOST=$HOST -j"$(nproc)" $DEPENDS_OPTS
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-linux-${{ github.sha }}
+          restore-keys: ccache-linux-
+
+      - name: Build
+        run: |
+          export CCACHE_DIR="$RUNNER_TEMP/ccache"
+          ./autogen.sh
+          CONFIG_SITE="$PWD/depends/$HOST/share/config.site" ./configure $CONFIGURE_OPTS \
+            LDFLAGS="-static-libstdc++ -static-libgcc"
+          make -j"$(nproc)"
+          mkdir -p out
+          cp src/litedoged src/litedoge-cli src/qt/litedoge-qt out/
+          strip out/*
+          ccache -s
+
+      - name: Check the binaries
+        run: |
+          file out/*
+          ldd out/litedoge-qt
+          ./out/litedoged -version | head -n 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: litedoge-linux-x86_64
+          path: out/
+
+      # Run the wallet on a virtual display and screenshot each page, so GUI
+      # changes can be reviewed from the run's artifacts
+      - name: Take GUI screenshots
+        continue-on-error: true
+        run: |
+          sudo apt-get install -y xvfb xdotool imagemagick libxkbcommon-x11-0 libxcb-icccm4 \
+            libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 libxcb-xkb1 libfontconfig1
+          PRINT_SCREENSHOTS_BASE64=1 contrib/ci/gui-screenshots.sh ./out/litedoge-qt screenshots
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gui-screenshots-linux
+          path: screenshots/
+          if-no-files-found: ignore
+
+  windows-gui:
+    name: Windows release (depends, cross-compiled)
+    runs-on: ubuntu-22.04
+    env:
+      HOST: x86_64-w64-mingw32
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config \
+            bsdmainutils python3 curl cmake ccache bison g++-mingw-w64-x86-64-posix nsis zip
+          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+
+      - uses: actions/cache@v4
+        id: depends
+        with:
+          path: |
+            depends/built
+            depends/sources
+          key: depends-${{ env.HOST }}-${{ hashFiles('depends/packages/**', 'depends/patches/**', 'depends/hosts/**', 'depends/builders/**', 'depends/Makefile', 'depends/funcs.mk') }}
+
+      - name: Build libraries (depends)
+        run: make -C depends HOST=$HOST -j"$(nproc)" $DEPENDS_OPTS
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-windows-${{ github.sha }}
+          restore-keys: ccache-windows-
+
+      - name: Build
+        run: |
+          export CCACHE_DIR="$RUNNER_TEMP/ccache"
+          ./autogen.sh
+          CONFIG_SITE="$PWD/depends/$HOST/share/config.site" ./configure $CONFIGURE_OPTS
+          make -j"$(nproc)"
+          mkdir -p out
+          cp src/litedoged.exe src/litedoge-cli.exe src/qt/litedoge-qt.exe out/
+          x86_64-w64-mingw32-strip out/*.exe
+          ccache -s
+
+      - name: Check the .exe files only need Windows' own DLLs
+        run: |
+          file out/*
+          for f in out/*.exe; do
+            echo "== $f"
+            x86_64-w64-mingw32-objdump -p "$f" | grep 'DLL Name' | sort -u
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: litedoge-windows-x86_64
+          path: out/
+
   release:
-    runs-on: ubuntu-20.04
-    needs: [binary, appimage]
-    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release-') }}
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [ linux-gui, windows-gui ]
+    runs-on: ubuntu-24.04
     steps:
-      - name: Detect env
-        id: detect
-        shell: bash
-        run: |
-          TAG_NAME=noop
-          RELEASE_TITLE=noop
-          if [[ $GITHUB_REF == refs/heads/develop || $GITHUB_REF == refs/heads/release-* ]]; then
-            TAG_NAME=latest
-            RELEASE_TITLE="Development Build: ${GITHUB_REF/refs\/heads\//}"
-          fi
-          if [[ $GITHUB_REF == refs/tags/v* ]]; then
-            TAG_NAME=${GITHUB_REF/refs\/tags\//}
-            TAG_NAME_NO_DOT=${TAG_NAME/ppc\./}
-            RELEASE_TITLE="Release ${TAG_NAME_NO_DOT/ppc/}"
-          fi
-          if [[ -z "${{ secrets.GPG_PRIVATE_KEY }}" ]]; then
-            TAG_NAME=noop
-            RELEASE_TITLE=noop
-          fi
-          echo "tag-name=$TAG_NAME" >> $GITHUB_OUTPUT
-          echo "release-title=${RELEASE_TITLE}" >> $GITHUB_OUTPUT
-          echo "sha8=$(echo ${{ github.sha }} | cut -c1-8)" >> $GITHUB_OUTPUT
-
-      - name: Set up environment
-        if: ${{ steps.detect.outputs.tag-name != 'noop' }}
-        run: sudo apt-get update && sudo apt-get install -y mktorrent gpg bash
-
-      - uses: actions/checkout@v3
-        if: ${{ steps.detect.outputs.tag-name != 'noop' }}
-
-      - uses: actions/download-artifact@v3
-        if: ${{ steps.detect.outputs.tag-name != 'noop' }}
-
-      - name: Import GPG key
-        if: ${{ steps.detect.outputs.tag-name != 'noop' }}
-        id: import_gpg
-        uses: crazy-max/ghaction-import-gpg@v5
+      - uses: actions/download-artifact@v4
         with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-
-      - name: GPG user IDs
-        if: ${{ steps.detect.outputs.tag-name != 'noop' }}
+          path: dist
+      - name: Package
         run: |
-          echo "fingerprint: ${{ steps.import_gpg.outputs.fingerprint }}"
-          echo "keyid:       ${{ steps.import_gpg.outputs.keyid }}"
-          echo "name:        ${{ steps.import_gpg.outputs.name }}"
-          echo "email:       ${{ steps.import_gpg.outputs.email }}"
-          gpg --keyserver hkp://keyserver.ubuntu.com --send-key ${{ steps.import_gpg.outputs.keyid }}
-
-      - name: Create torrent
-        if: ${{ steps.detect.outputs.tag-name != 'noop' }}
-        run: |
-          rm -rf ${{ steps.detect.outputs.tag-name }}/*
-          mkdir -p ${{ steps.detect.outputs.tag-name }}
-          mv peercoin-*-**/peercoin-*.tar.gz \
-            peercoin-*-**/peercoin-*.zip \
-            peercoin-*-**/peercoin-*.exe \
-            peercoin-*-**/peercoin-*.dmg \
-            peercoin-*-**/*.AppImage* \
-          ${{ steps.detect.outputs.tag-name }}/
-          cd ${{ steps.detect.outputs.tag-name }}
-          sha256sum * > SHA256SUMS
-          gpg --digest-algo sha256 --clearsign SHA256SUMS
-          rm SHA256SUMS
-          cd -
-          mktorrent -w ${{ github.server_url }}/${{ github.repository }}/releases/download \
-            -o ${{ steps.detect.outputs.tag-name }}/peercoin-${{ steps.detect.outputs.tag-name }}.torrent \
-            -a udp://tracker.opentrackr.org:1337/announce \
-            -a udp://tracker.openbittorrent.com:6969/announce \
-            -a udp://exodus.desync.com:6969/announce \
-          ${{ steps.detect.outputs.tag-name }}
-
-      - name: Check latest
-        id: detect-publish-latest
-        if: ${{ steps.detect.outputs.tag-name != 'noop' && (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release-')) }}
-        run: |
-          PUBLISH=noop
-          git fetch origin +refs/tags/latest:refs/tags/latest
-          if ! git merge-base --is-ancestor refs/tags/latest HEAD; then
-            PUBLISH=op
-          fi
-          echo "publish=$PUBLISH" >> $GITHUB_OUTPUT
-
-      - name: Generate Changelog
-        if: ${{ steps.detect.outputs.tag-name != 'noop' && startsWith(github.ref, 'refs/tags/v') }}
-        run: |
-          git fetch --depth=1 origin +${{ github.ref }}:${{ github.ref }}
-          git tag -l --format='%(contents)' ${GITHUB_REF/refs\/tags\//} > ${{ github.workspace }}-CHANGELOG.txt
-
-      - uses: marvinpinto/action-automatic-releases@919008cf3f741b179569b7a6fb4d8860689ab7f0
-        if: ${{ steps.detect.outputs.tag-name != 'noop' && steps.detect-publish-latest.outputs.publish == 'op' && (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release-')) }}
+          cd dist
+          tar -czf "litedoge-${GITHUB_REF_NAME}-linux-x86_64.tar.gz" -C litedoge-linux-x86_64 .
+          (cd litedoge-windows-x86_64 && zip -9 "../litedoge-${GITHUB_REF_NAME}-win64.zip" *.exe)
+          sha256sum *.tar.gz *.zip > SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
         with:
-          repo_token: ${{ github.token }}
-          automatic_release_tag: ${{ steps.detect.outputs.tag-name }}
-          prerelease: true
-          title: "${{ steps.detect.outputs.release-title }}"
-          files: ${{ steps.detect.outputs.tag-name }}/*
-
-      - uses: softprops/action-gh-release@6034af24fba4e5a8e975aaa6056554efe4c794d0
-        if: ${{ steps.detect.outputs.tag-name != 'noop' && startsWith(github.ref, 'refs/tags/v') }}
-        with:
-          body_path: ${{ github.workspace }}-CHANGELOG.txt
-          token: ${{ github.token }}
-          prerelease: true
-          name: "${{ steps.detect.outputs.release-title }}"
-          files: ${{ steps.detect.outputs.tag-name }}/*
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/SHA256SUMS.txt

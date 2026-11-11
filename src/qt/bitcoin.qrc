@@ -52,7 +52,6 @@
         <file alias="network_disabled">res/icons/network_disabled.png</file>
         <file alias="proxy">res/icons/proxy.png</file>
     </qresource>
-    </qresource>
     <qresource prefix="/icons/black">
         <file alias="connect_0">res/icons/black/connect0_16.png</file>
         <file alias="connect_1">res/icons/black/connect1_16.png</file>

@@ -182,7 +182,7 @@ jobs:
       - name: Take GUI screenshots
         continue-on-error: true
         run: |
-          sudo apt-get install -y xvfb xdotool imagemagick libxkbcommon-x11-0 libxcb-icccm4 \
+          sudo apt-get install -y gdb xvfb xdotool imagemagick libxkbcommon-x11-0 libxcb-icccm4 \
             libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 libxcb-xkb1 libxcb-shape0 libfontconfig1
           PRINT_SCREENSHOTS_BASE64=1 contrib/ci/gui-screenshots.sh ./out/litedoge-qt screenshots
 

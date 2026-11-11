@@ -70,6 +70,12 @@ if [ -z "$WID" ]; then
     import -window root "$OUT/00-screen.png"
     xdotool search --name '.' getwindowname %@ 2>/dev/null | head -n 20
     cat "$OUT/litedoge-qt.log"
+    echo "--- last lines of debug.log"
+    tail -n 60 "$DATA/debug.log" 2>/dev/null
+    if ! kill -0 "$APP" 2>/dev/null && command -v gdb >/dev/null; then
+        echo "--- the wallet exited; running it again under gdb for a backtrace"
+        timeout 240 gdb -batch -ex run -ex "thread apply all bt 25" --args "$BIN" -datadir="$DATA" -splash=0 -choosedatadir=0 -wallet=ci 2>&1 | grep -v "^\[New Thread\|^\[Thread" | tail -n 250
+    fi
     print_shots
     cleanup
     exit 1

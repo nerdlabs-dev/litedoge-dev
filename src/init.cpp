@@ -143,7 +143,6 @@ static const char* DEFAULT_ASMAP_FILENAME="ip_asn.map";
  */
 static const char* BITCOIN_PID_FILENAME = "litedoged.pid";
 
-static std::shared_ptr<CWallet> walletTmp;
 
 static fs::path GetPidFile(const ArgsManager& args)
 {
@@ -253,6 +252,11 @@ void Shutdown(NodeContext& node)
     // using the other before destroying them.
     if (node.peerman) UnregisterValidationInterface(node.peerman.get());
     if (node.connman) node.connman->Stop();
+
+    // peercoin: the stake minter stops when the network is interrupted
+    if (m_minter_thread.joinable()) {
+        m_minter_thread.join();
+    }
 
     StopTorControl();
 
@@ -1949,11 +1953,10 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 #endif
 #ifdef ENABLE_WALLET
 {
-// ppctodo: deal with multiple wallets
-    if (node.wallet_loader->getWallets().size() && gArgs.GetBoolArg("-stakegen", true)) {
-        walletTmp = std::shared_ptr<CWallet>(node.wallet_loader->getWallets()[0]->wallet());
-        MintStake(walletTmp, node);
-        }
+    // ppctodo: deal with multiple wallets
+    if (node.wallet_loader && node.wallet_loader->getWallets().size() && gArgs.GetBoolArg("-stakegen", true)) {
+        MintStake(node);
+    }
 }
 #endif
 

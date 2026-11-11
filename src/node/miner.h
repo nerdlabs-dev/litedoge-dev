@@ -12,6 +12,7 @@
 #include <node/context.h>
 #include <memory>
 #include <optional>
+#include <thread>
 #include <stdint.h>
 #include <wallet/wallet.h>
 
@@ -19,6 +20,7 @@
 #include <boost/multi_index_container.hpp>
 
 extern int64_t nLastCoinStakeSearchInterval;
+extern std::thread m_minter_thread;
 class ChainstateManager;
 
 class ChainstateManager;
@@ -206,7 +208,7 @@ namespace boost {
     class thread_group;
 } // namespace boost
 
-void MintStake(std::shared_ptr<CWallet> pwallet, NodeContext& m_node);
+void MintStake(NodeContext& m_node);
 
 /** Update an old GenerateCoinbaseCommitment from CreateNewBlock after the block txs have changed */
 void RegenerateCommitments(CBlock& block, ChainstateManager& chainman);

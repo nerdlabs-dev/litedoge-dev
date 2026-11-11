@@ -47,11 +47,13 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config \
+          for i in 1 2 3 4; do
+            sudo apt-get update && sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config \
             bsdmainutils python3 ccache libevent-dev libboost-dev libsqlite3-dev libdb5.3++-dev \
             libminiupnpc-dev libnatpmp-dev libssl-dev qtbase5-dev qttools5-dev qttools5-dev-tools \
-            libqrencode-dev
+            libqrencode-dev && break
+            echo 'apt failed, retrying'; sleep 30
+          done
 
       - uses: actions/cache@v4
         with:
@@ -126,9 +128,11 @@ jobs:
 
       - name: Install build tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config \
-            bsdmainutils python3 curl cmake ccache bison
+          for i in 1 2 3 4; do
+            sudo apt-get update && sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config \
+            bsdmainutils python3 curl cmake ccache bison && break
+            echo 'apt failed, retrying'; sleep 30
+          done
 
       # The libraries take ~40 minutes to build, so they are cached as soon as
       # they are built (not only when the whole job succeeds)
@@ -185,8 +189,11 @@ jobs:
       - name: Take GUI screenshots
         continue-on-error: true
         run: |
-          sudo apt-get install -y gdb xvfb xdotool imagemagick libxkbcommon-x11-0 libxcb-icccm4 \
-            libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 libxcb-xkb1 libxcb-shape0 libfontconfig1
+          for i in 1 2 3 4; do
+            sudo apt-get update && sudo apt-get install -y gdb xvfb xdotool imagemagick libxkbcommon-x11-0 libxcb-icccm4 \
+            libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 libxcb-xkb1 libxcb-shape0 libfontconfig1 && break
+            echo 'apt failed, retrying'; sleep 30
+          done
           PRINT_SCREENSHOTS_BASE64=1 contrib/ci/gui-screenshots.sh ./out/litedoge-qt screenshots
 
       - uses: actions/upload-artifact@v4
@@ -206,9 +213,11 @@ jobs:
 
       - name: Install build tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config \
-            bsdmainutils python3 curl cmake ccache bison g++-mingw-w64-x86-64-posix nsis zip
+          for i in 1 2 3 4; do
+            sudo apt-get update && sudo apt-get install -y build-essential libtool autotools-dev automake pkg-config \
+            bsdmainutils python3 curl cmake ccache bison g++-mingw-w64-x86-64-posix nsis zip && break
+            echo 'apt failed, retrying'; sleep 30
+          done
           sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
           sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
 

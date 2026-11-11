@@ -1,4 +1,4 @@
-# LITEDOGE- LDOGE | CORE Wallet Version 3.6.0.1 
+# LITEDOGE- LDOGE | CORE Wallet Version 3.6.0.2 
 ![8b55011e9d71b1e9da2ebfb528d43268](https://github.com/ldoge/LDOGE/blob/master/src/qt/res/icons/litedogecoin-128.png) 
 ### What is Litedoge?
 [LITEDOGE- LDOGE](https://litedogeofficial.org) (abbreviated LDOGE), (prounced as Light Doghe) LiteDoge is a free open source project derived from Bitcoin, with
@@ -20,6 +20,36 @@ LDOGE Information
  Maturity:              |501 blocks       | -                |  89.41.26.58      | - 
 
         
+## The modern wallet (3.6.0.2)
+
+This branch is the LiteDoge wallet rebuilt on Peercoin 0.13 / Bitcoin Core 25,
+for current Linux and Windows (OpenSSL 1.1, current Boost, Qt 5.15,
+SQLite and Berkeley DB 4.8 wallets). It follows the same chain and rules as
+the 3.6.0.1 wallets and talks to them on the network (protocol 60070, accepts
+60067 and up).
+
+**Downloads.** Every push is built by GitHub Actions (Actions tab > Build >
+the run > Artifacts): `litedoge-linux-x86_64` and `litedoge-windows-x86_64`,
+each with `litedoge-qt`, `litedoged` and `litedoge-cli`. Pushing a tag such
+as `v3.6.0.2` publishes them as a release.
+
+The Linux build needs the X11 libraries Qt uses, on Ubuntu/Debian:
+`sudo apt install libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0`
+
+**Data folder.** The same folder as the 3.x wallets (`~/.litedoge`,
+`%APPDATA%\LiteDoge`). The chain is downloaded again into `chain/` (25 MiB
+`blk*.dat` files plus `chain/index`) and `chainstate/`; the old `blk0001.dat`
+and `txleveldb/` aren't used. **Back up `wallet.dat` first:** this wallet
+loads it and may write records the old wallets don't know.
+
+**Notes.** No segwit/bech32 addresses (LiteDoge never had segwit). Fees are
+0.1 LDOGE per started 1000 bytes, as the 3.x wallets relay. Staking needs the
+transaction index, so pruning isn't available. `-dbcache` defaults to 100 MB;
+raise it for a faster first sync.
+
+**Building.** As Bitcoin Core 25: `./autogen.sh && ./configure && make`, or
+with `depends/` (see `.github/workflows/build.yml` for the exact commands).
+
 # Punch list of development in the works 
 
 Enable Proof of work again, Make rewards up to 18 coins per P.O.W. Block, Electrum Wallet, make buildable on all systems

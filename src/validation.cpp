@@ -268,13 +268,22 @@ bool CheckSequenceLocksAtTip(CBlockIndex* tip,
 static std::array<ThresholdConditionCache, VERSIONBITS_NUM_BITS> warningcache GUARDED_BY(cs_main);
 
 // Returns the script flags which should be checked for a given block
-static unsigned int GetBlockScriptFlags(const CBlockIndex& block_index, const ChainstateManager& chainman)
+static unsigned int GetBlockScriptFlags(const CBlockIndex& block_index, const ChainstateManager& chainman);
+
+static void LimitMempoolSize(CTxMemPool& pool, CCoinsViewCache& coins_cache)
+    EXCLUSIVE_LOCKS_REQUIRED(::cs_main, pool.cs)
 {
-    // LiteDoge: the 3.x wallets check every script with P2SH and nothing else
-    // (no DERSIG, CHECKLOCKTIMEVERIFY, CHECKSEQUENCEVERIFY, NULLDUMMY, segwit or
-    // taproot), so blocks are checked with exactly that. Stricter rules are
-    // still applied to new transactions by the mempool policy.
-    return SCRIPT_VERIFY_P2SH;
+    AssertLockHeld(::cs_main);
+    AssertLockHeld(pool.cs);
+    int expired = pool.Expire(GetTime<std::chrono::seconds>() - pool.m_expiry);
+    if (expired != 0) {
+        LogPrint(BCLog::MEMPOOL, "Expired %i transactions from the memory pool\n", expired);
+    }
+
+    std::vector<COutPoint> vNoSpendsRemaining;
+    pool.TrimToSize(pool.m_max_size_bytes, &vNoSpendsRemaining);
+    for (const COutPoint& removed : vNoSpendsRemaining)
+        coins_cache.Uncache(removed);
 }
 
 void Chainstate::MaybeUpdateMempoolForReorg(
@@ -1897,44 +1906,11 @@ void StopScriptCheckWorkerThreads()
 
 static unsigned int GetBlockScriptFlags(const CBlockIndex& block_index, const ChainstateManager& chainman)
 {
-    const Consensus::Params& consensusparams = chainman.GetConsensus();
-
-    // BIP16 didn't become active until Apr 1 2012 (on mainnet, and
-    // retroactively applied to testnet)
-    // However, only one historical block violated the P2SH rules (on both
-    // mainnet and testnet).
-    // Similarly, only one historical block violated the TAPROOT rules on
-    // mainnet.
-    // For simplicity, always leave P2SH+WITNESS+TAPROOT on except for the two
-    // violating blocks.
-    uint32_t flags{SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT};
-    const auto it{consensusparams.script_flag_exceptions.find(*Assert(block_index.phashBlock))};
-    if (it != consensusparams.script_flag_exceptions.end()) {
-        flags = it->second;
-    }
-
-    // Enforce the DERSIG (BIP66) rule
-    if (block_index.pprev && IsBTC16BIPsEnabled(block_index.pprev->nTime)) {
-        flags |= SCRIPT_VERIFY_DERSIG;
-    }
-
-    // Enforce CHECKLOCKTIMEVERIFY (BIP65)
-    if (IsProtocolV06(block_index.pprev)) {
-        flags |= SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY;
-    }
-
-    // Enforce BIP68 (sequence locks) and BIP112 (CHECKSEQUENCEVERIFY)
-    // Enforce BIP147 NULLDUMMY (activated simultaneously with segwit)
-    if (block_index.pprev && IsBTC16BIPsEnabled(block_index.pprev->nTime)) {
-        flags |= SCRIPT_VERIFY_CHECKSEQUENCEVERIFY | SCRIPT_VERIFY_NULLDUMMY;
-    }
-
-    // Enforce Taproot (BIP340-BIP342)
-    if (block_index.pprev && IsProtocolV12(block_index.pprev)) {
-        flags |= SCRIPT_VERIFY_TAPROOT;
-    }
-
-    return flags;
+    // LiteDoge: the 3.x wallets check every script with P2SH and nothing else
+    // (no DERSIG, CHECKLOCKTIMEVERIFY, CHECKSEQUENCEVERIFY, NULLDUMMY, segwit or
+    // taproot), so blocks are checked with exactly that. Stricter rules are
+    // still applied to new transactions by the mempool policy.
+    return SCRIPT_VERIFY_P2SH;
 }
 
 

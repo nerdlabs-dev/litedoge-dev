@@ -59,7 +59,10 @@ int main(int argc, char* argv[])
     // All tests must use their own testing setup (if needed).
     fs::create_directories([] {
         BasicTestingSetup dummy{CBaseChainParams::REGTEST};
-        return gArgs.GetDataDirNet() / "blocks";
+        // (the block files directory is "chain" in LiteDoge; recreating
+        // "blocks" left the cached path pointing at a missing directory and
+        // the app test hung on the "blocks directory does not exist" error)
+        return gArgs.GetDataDirNet() / "chain";
     }());
 
     std::unique_ptr<interfaces::Init> init = interfaces::MakeGuiInit(argc, argv);

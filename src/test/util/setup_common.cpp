@@ -185,7 +185,7 @@ ChainTestingSetup::ChainTestingSetup(const std::string& chainName, const std::ve
     };
     m_node.chainman = std::make_unique<ChainstateManager>(chainman_opts, node::BlockManager::Options{});
     m_node.chainman->m_blockman.m_block_tree_db = std::make_unique<CBlockTreeDB>(DBParams{
-        .path = m_args.GetDataDirNet() / "blocks" / "index",
+        .path = m_args.GetDataDirNet() / "chain" / "index",
         .cache_bytes = static_cast<size_t>(m_cache_sizes.block_tree_db),
         .memory_only = true});
 

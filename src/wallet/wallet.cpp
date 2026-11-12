@@ -3588,26 +3588,32 @@ bool CWallet::CreateCoinStake(ChainstateManager& chainman, const CWallet* pwalle
     std::vector<CTransactionRef> vwtxPrev;
     CAmount nValueIn = 0;
     CCoinControl temp;
-    FastRandomContext rng_fast;
-    CoinSelectionParams coin_selection_params{rng_fast};
-    coin_selection_params.m_subtract_fee_outputs = true;
-    coin_selection_params.m_coinstake = true;
-
-    bool bnb_used;
     wallet::CoinsResult availableCoins = AvailableCoins(*pwallet, &temp);
 
     CAmount nAllowedBalance = nBalance;
     if (nReserveBalance) nAllowedBalance -= nReserveBalance.value();
 
-    util::Result<SelectionResult> result = SelectCoins(*pwallet, availableCoins, /*pre_set_inputs=*/ {}, nAllowedBalance, temp, coin_selection_params);
-
-    if (!result)
+    // Every coin may try to stake, up to the balance not held in reserve.
+    // (The port ran the full coin selection - branch and bound, knapsack
+    // and random draws over all coins, for a target of the whole balance -
+    // on every stake search with the wallet and chain locked, which made
+    // the window freeze after unlocking a wallet with many coins.)
+    std::vector<std::shared_ptr<COutput>> vStakeCoins;
+    {
+        CAmount nSelected = 0;
+        for (const COutput& out : availableCoins.All()) {
+            if (nSelected + out.txout.nValue > nAllowedBalance) continue;
+            nSelected += out.txout.nValue;
+            vStakeCoins.push_back(std::make_shared<COutput>(out));
+        }
+    }
+    if (vStakeCoins.empty())
         return false;
 
     CAmount nCredit = 0;
     CScript scriptPubKeyKernel;
 
-    for (const auto& pcoin : result->GetInputSet())
+    for (const auto& pcoin : vStakeCoins)
     {
         CDiskTxPos postx;
         if (!g_txindex->FindTxPosition(pcoin->outpoint.hash, postx))
@@ -3626,7 +3632,10 @@ bool CWallet::CreateCoinStake(ChainstateManager& chainman, const CWallet* pwalle
                     file >> header;
                     fseek(file.Get(), postx.nTxOffset, SEEK_CUR);
                     file >> tx;
-                    if (g_txindex->cachedTxs.size() >= TxIndex::MAX_CACHED_TXS) g_txindex->cachedTxs.clear();
+                    // drop one entry when full (clearing all of it meant a
+                    // wallet with more coins than the cache read them all
+                    // from disk on every try)
+                    if (g_txindex->cachedTxs.size() >= TxIndex::MAX_CACHED_TXS) g_txindex->cachedTxs.erase(g_txindex->cachedTxs.begin());
                     g_txindex->cachedTxs[pcoin->outpoint.hash]=std::pair(header,tx);
                 } catch (std::exception &e) {
                     return error("%s() : deserialize or I/O error in CreateCoinStake()", __PRETTY_FUNCTION__);
@@ -3722,30 +3731,33 @@ bool CWallet::CreateCoinStake(ChainstateManager& chainman, const CWallet* pwalle
     }
     if (nCredit == 0 || nCredit > nAllowedBalance)
         return false;
-    for (const auto& pcoin : result->GetInputSet())
+    for (const auto& pcoin : vStakeCoins)
     {
-        CDiskTxPos postx;
-        if (!g_txindex->FindTxPosition(pcoin->outpoint.hash, postx))
-            continue;
-
-        // Read block header
-        CAutoFile file(node::OpenBlockFile(postx, true), SER_DISK, CLIENT_VERSION);
-        CBlockHeader header;
-        CTransactionRef tx;
-        try {
-            file >> header;
-            fseek(file.Get(), postx.nTxOffset, SEEK_CUR);
-            file >> tx;
-        } catch (std::exception &e) {
-            return error("%s() : deserialize or I/O error in CreateCoinStake()", __PRETTY_FUNCTION__);
-        }
-
-
         // Attempt to add more inputs
         // Only add coins of the same key/address as kernel
         if (txNew.vout.size() == 2 && ((pcoin->txout.scriptPubKey == scriptPubKeyKernel || pcoin->txout.scriptPubKey == txNew.vout[1].scriptPubKey))
             && pcoin->outpoint.hash != txNew.vin[0].prevout.hash)
         {
+            // (the transaction is read only for coins that qualify; the port
+            // read every coin of the wallet from disk here)
+            CTransactionRef tx;
+            auto it = g_txindex->cachedTxs.find(pcoin->outpoint.hash);
+            if (it != g_txindex->cachedTxs.end()) {
+                tx = it->second.second;
+            } else {
+                CDiskTxPos postx;
+                if (!g_txindex->FindTxPosition(pcoin->outpoint.hash, postx))
+                    continue;
+                CAutoFile file(node::OpenBlockFile(postx, true), SER_DISK, CLIENT_VERSION);
+                CBlockHeader header;
+                try {
+                    file >> header;
+                    fseek(file.Get(), postx.nTxOffset, SEEK_CUR);
+                    file >> tx;
+                } catch (std::exception &e) {
+                    return error("%s() : deserialize or I/O error in CreateCoinStake()", __PRETTY_FUNCTION__);
+                }
+            }
             // Stop adding more inputs if already too many inputs
             if (txNew.vin.size() >= 100)
                 break;

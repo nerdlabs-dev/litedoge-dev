@@ -6,6 +6,8 @@
 
 #include <QAbstractTableModel>
 #include <QStringList>
+
+class QTimer;
 #include <interfaces/handler.h>
 
 class MintingTablePriv;
@@ -49,7 +51,10 @@ private:
     QStringList columns;
     int mintingInterval;
     MintingTablePriv *priv;
-    MintingFilterProxy *mintingProxyModel;
+    MintingFilterProxy *mintingProxyModel{nullptr};
+    QTimer *m_refresh_timer{nullptr};
+    double m_difficulty{0.0};
+    void updateDifficulty();
     int cachedNumBlocks;
 
     QString lookupAddress(const std::string &address, bool tooltip) const;
@@ -65,6 +70,7 @@ private:
 public Q_SLOTS:
     void updateTransaction(const QString &hash, int status);
     void updateAge();
+    void refreshNow();
     void updateDisplayUnit();
 
     friend class MintingTablePriv;

@@ -48,7 +48,9 @@ public:
 };
 
 //! Default for -keypool
-static const unsigned int DEFAULT_KEYPOOL_SIZE = 1000;
+// (LiteDoge: 100, as the 3.x wallets; with 1000 the first new address after
+// unlocking an older wallet made 900 encrypted keys while the window waited)
+static const unsigned int DEFAULT_KEYPOOL_SIZE = 100;
 
 std::vector<CKeyID> GetAffectedKeys(const CScript& spk, const SigningProvider& provider);
 

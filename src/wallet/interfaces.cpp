@@ -412,6 +412,29 @@ public:
         LOCK(m_wallet->cs_wallet);
         return InputIsMine(*m_wallet, txin);
     }
+    std::vector<WalletMintingOutput> getMintingOutputs() override
+    {
+        LOCK(m_wallet->cs_wallet);
+        std::vector<WalletMintingOutput> result;
+        for (const auto& [txid, wtx] : m_wallet->mapWallet) {
+            const int depth = m_wallet->GetTxDepthInMainChain(wtx);
+            if (wtx.IsCoinBase() ? depth < 2 : depth <= 0) continue;
+            for (uint32_t n = 0; n < wtx.tx->vout.size(); ++n) {
+                const CTxOut& txout = wtx.tx->vout[n];
+                if (txout.IsEmpty() || !m_wallet->IsMine(txout)) continue;
+                if (m_wallet->IsSpent(COutPoint(txid, n))) continue;
+                WalletMintingOutput out;
+                out.hash = txid;
+                out.n = n;
+                out.time = wtx.tx->nTime ? wtx.tx->nTime : wtx.GetTxTime();
+                out.txout = txout;
+                auto it = wtx.mapValue.find("to");
+                if (it != wtx.mapValue.end()) out.to = it->second;
+                result.push_back(std::move(out));
+            }
+        }
+        return result;
+    }
     isminetype txoutIsMine(const CTxOut& txout) override
     {
         LOCK(m_wallet->cs_wallet);

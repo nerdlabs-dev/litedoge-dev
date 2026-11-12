@@ -48,6 +48,7 @@ struct WalletAddress;
 struct WalletBalances;
 struct WalletTx;
 struct WalletTxOut;
+struct WalletMintingOutput;
 struct WalletTxStatus;
 
 using WalletOrderForm = std::vector<std::pair<std::string, std::string>>;
@@ -217,6 +218,10 @@ public:
 
     //! Return wallet transaction output information.
     virtual std::vector<WalletTxOut> getCoins(const std::vector<COutPoint>& outputs) = 0;
+
+    //! Return every unspent confirmed output of this wallet, for the Minting
+    //! tab, in one pass under one lock.
+    virtual std::vector<WalletMintingOutput> getMintingOutputs() = 0;
 /*
     //! Get required fee.
     virtual CAmount getRequiredFee(unsigned int tx_bytes) = 0;
@@ -403,6 +408,16 @@ struct WalletTxOut
     int64_t time;
     int depth_in_main_chain = -1;
     bool is_spent = false;
+};
+
+//! Unspent wallet output, as listed on the Minting tab.
+struct WalletMintingOutput
+{
+    uint256 hash;
+    uint32_t n;
+    int64_t time;
+    CTxOut txout;
+    std::string to; //!< "to" label of the transaction, for outputs without an address
 };
 
 //! Return implementation of Wallet interface. This function is defined in

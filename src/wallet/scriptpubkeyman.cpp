@@ -233,6 +233,10 @@ bool LegacyScriptPubKeyMan::CheckDecryptionKey(const CKeyingMaterial& master_key
         bool keyFail = false;
         CryptedKeyMap::const_iterator mi = mapCryptedKeys.begin();
         WalletBatch batch(m_storage.GetDatabase());
+        // The first unlock of an older wallet rewrites every key with a
+        // checksum; do it as one database transaction, not one per key
+        // (with thousands of keys the window froze for a long time)
+        const bool rewrite = !fDecryptionThoroughlyChecked && batch.TxnBegin();
         for (; mi != mapCryptedKeys.end(); ++mi)
         {
             const CPubKey &vchPubKey = (*mi).second.first;
@@ -250,6 +254,9 @@ bool LegacyScriptPubKeyMan::CheckDecryptionKey(const CKeyingMaterial& master_key
                 // Rewrite these encrypted keys with checksums
                 batch.WriteCryptedKey(vchPubKey, vchCryptedSecret, mapKeyMetadata[vchPubKey.GetID()]);
             }
+        }
+        if (rewrite) {
+            if (keyFail) batch.TxnAbort(); else batch.TxnCommit();
         }
         if (keyPass && keyFail)
         {

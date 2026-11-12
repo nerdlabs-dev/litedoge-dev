@@ -241,7 +241,11 @@ public:
 
     bool IsProofOfStake() const
     {
-        return nNonce == 0;
+        // LiteDoge: set when the header is added, from its height and nonce
+        // (IsProofOfStakeHeader), and checked against the full block. (The
+        // port used nonce == 0 alone, which is wrong for any staked block
+        // with a non-zero nonce.)
+        return nFlags & BLOCK_PROOF_OF_STAKE;
     }
 
     unsigned int GetStakeEntropyBit() const

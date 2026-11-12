@@ -3707,7 +3707,11 @@ bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValida
             return true;
         }
 
-        if (!CheckBlockHeader(block, state, GetConsensus(), !(block.nFlags & CBlockIndex::BLOCK_PROOF_OF_STAKE))) {
+        // LiteDoge: whether this header needs proof-of-work depends on its
+        // height (IsProofOfStakeHeader), so the work is checked in
+        // ContextualCheckBlockHeader below. (Old peers send no PoS flag, so
+        // checking it here rejected every proof-of-stake header as "high-hash".)
+        if (!CheckBlockHeader(block, state, GetConsensus(), /*fCheckPOW=*/false)) {
             LogPrint(BCLog::VALIDATION, "%s: Consensus::CheckBlockHeader: %s, %s\n", __func__, hash.ToString(), state.ToString());
             return false;
         }

@@ -42,6 +42,7 @@ using interfaces::WalletLoader;
 using interfaces::WalletOrderForm;
 using interfaces::WalletTx;
 using interfaces::WalletTxOut;
+using interfaces::WalletMintingOutput;
 using interfaces::WalletTxStatus;
 using interfaces::WalletValueMap;
 

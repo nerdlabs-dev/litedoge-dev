@@ -459,6 +459,40 @@ bool CheckProofOfStake(BlockValidationState &state, CBlockIndex* pindexPrev, con
     // Kernel (input 0) must match the stake hash target per coin age (nBits)
     const CTxIn& txin = tx->vin[0];
 
+    // LiteDoge: the staked coin is normally still in the UTXO set (which is
+    // at pindexPrev when this runs), and the coin holds everything the PoS v2
+    // kernel needs: value, script, transaction time and the height of its
+    // block. That avoids reading the transaction from disk through the
+    // transaction index for every block, and works even while the index is
+    // still catching up (which used to fail with "tx index not found").
+    {
+        Coin coin;
+        if (chainstate.CoinsTip().GetBestBlock() == pindexPrev->GetBlockHash() &&
+            chainstate.CoinsTip().GetCoin(txin.prevout, coin) && !coin.IsSpent() &&
+            coin.nHeight <= pindexPrev->nHeight) {
+            const CBlockIndex* pindexFrom = pindexPrev->GetAncestor(coin.nHeight);
+            if (!pindexFrom)
+                return error("CheckProofOfStake() : block of staked coin not found");
+            const CBlockHeader headerFrom = pindexFrom->GetBlockHeader();
+
+            CMutableTransaction mtxPrev;
+            mtxPrev.nTime = coin.nTime;
+            mtxPrev.vout.resize(txin.prevout.n + 1);
+            mtxPrev.vout[txin.prevout.n] = coin.out;
+            const CTransactionRef txPrevCoin = MakeTransactionRef(std::move(mtxPrev));
+
+            {
+                const CTxOut& prevOut = coin.out;
+                TransactionSignatureChecker checker(&(*tx), 0, prevOut.nValue, PrecomputedTransactionData(*tx), MissingDataBehavior(1));
+                if (!VerifyScript(tx->vin[0].scriptSig, prevOut.scriptPubKey, &(tx->vin[0].scriptWitness), SCRIPT_VERIFY_P2SH, checker, nullptr))
+                    return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "invalid-pos-script", strprintf("%s: VerifyScript failed on coinstake %s", __func__, tx->GetHash().ToString()));
+            }
+            if (!CheckStakeKernelHash(nBits, pindexPrev, headerFrom, 0, txPrevCoin, txin.prevout, nTimeTx, hashProofOfStake, gArgs.GetBoolArg("-debug", false), chainstate))
+                return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "check-kernel-failed", strprintf("CheckProofOfStake() : INFO: check kernel failed on coinstake %s, hashProof=%s", tx->GetHash().ToString(), hashProofOfStake.ToString()));
+            return true;
+        }
+    }
+
     // Transaction index is required to get to block header
     if (!g_txindex)
         return error("CheckProofOfStake() : transaction index not available");

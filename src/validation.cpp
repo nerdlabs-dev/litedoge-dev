@@ -3899,7 +3899,7 @@ bool Chainstate::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, BlockV
     // is connected (ConnectBlock does that for any block whose stake modifier
     // hasn't been computed yet) instead of throwing it away and downloading it
     // again.
-    if (pindex->pprev && !m_chain.Contains(pindex->pprev)) {
+    if (pindex->pprev && pindex->pprev != m_chain.Tip()) {
         fCheckPoS = false;
     }
 

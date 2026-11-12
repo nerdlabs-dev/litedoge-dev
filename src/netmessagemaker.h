@@ -19,7 +19,10 @@ public:
     {
         CSerializedNetMsg msg;
         msg.m_type = std::move(msg_type);
-        CVectorWriter{ SER_NETWORK | SER_POSMARKER, nFlags | nVersion, msg.data, 0, std::forward<Args>(args)... };
+        // LiteDoge: no Peercoin PoS marker (the extra 4-byte nFlags after each
+        // block header). The 3.x wallets don't expect it, so every block and
+        // header we sent them would have been misread.
+        CVectorWriter{ SER_NETWORK, nFlags | nVersion, msg.data, 0, std::forward<Args>(args)... };
         return msg;
     }
 
